@@ -17,7 +17,7 @@ type Maybe[T] = Union[T, None]
 WORD_LIST = "/usr/share/dict/words"
 
 
-def read_words(wfilter: FilterType) -> set[str]:
+def filter_word_list(wfilter: FilterType) -> set[str]:
     """
     Return a list of words matching a filter,
     from WORD_LIST
@@ -29,13 +29,6 @@ def read_words(wfilter: FilterType) -> set[str]:
             if wfilter(w):
                 words.add(w)
     return words
-
-
-def null_filter(x: str) -> bool:
-    """
-    Filter to get all words.
-    """
-    return True
 
 
 def cdlegal_filter(x: str) -> bool:
@@ -50,17 +43,17 @@ def conundrum_filter(x: str) -> bool:
     """
     We only want nine letter words that are not capitalized.
     """
-    return len(x) == 9 and not x[0].isupper()
+    return len(x) == 9 and cdlegal_filter(x)
 
 
-def interstitial_break_filter(x: str) -> bool:
+def interstitial_filter(x: str) -> bool:
     """
     We only want 8 and 9 letter words that are not capitalized.
     """
-    return len(x) in {8, 9} and not x[0].isupper()
+    return len(x) in {8, 9} and cdlegal_filter(x)
 
 
-def check_anagrams_longest(
+def nlongest_anagrams(
     clue: str, word_set: set[str], n_longest: int = 1
 ) -> Maybe[set[str]]:
     """
@@ -75,11 +68,13 @@ def check_anagrams_longest(
     return sorted(matched, key=len, reverse=True)[:n_longest]
 
 
-def check_anagrams_first(
+def first_matching_conundrum(
     clue: str, word_set: set[str], filter_: FilterType, len_delta: int = 0
 ) -> Maybe[str]:
     """
-    Find the first anagram matching a pattern.
+    Find the first anagram matching a conundrum filter.
+
+    Throws AssertionError on clue not matching the filter.
     """
     assert filter_(clue)
     for ld in range(len_delta + 1):
@@ -90,11 +85,13 @@ def check_anagrams_first(
     return None
 
 
-def check_anagrams(
+def all_matching_conundrums(
     clue: str, word_set: set[str], filter_: FilterType, len_delta: int = 0
 ) -> set[str]:
     """
     Return all of the matching anagrams.
+
+    Throws AssertionError on clue not matching the filter.
     """
     assert filter_(clue)
     matched: set[str] = set()
@@ -112,18 +109,22 @@ def conundrum(clue: str) -> None:
     """
     Print results for a final conundrum clue.
     """
-    conundrum_word_set = read_words(conundrum_filter)
-    print(check_anagrams(clue, conundrum_word_set, conundrum_filter, len_delta=0))
+    conundrum_word_set = filter_word_list(conundrum_filter)
+    print(
+        all_matching_conundrums(clue, conundrum_word_set, conundrum_filter, len_delta=0)
+    )
 
 
 def interstitial(clue: str) -> None:
     """
     Print results for an interstitial conundrum clue.
+
+    Use len_delta since they can be 8 or 9 chars long.
     """
-    interstitial_break_word_set = read_words(interstitial_break_filter)
+    interstitial_word_set = filter_word_list(interstitial_filter)
     print(
-        check_anagrams(
-            clue, interstitial_break_word_set, interstitial_break_filter, len_delta=1
+        all_matching_conundrums(
+            clue, interstitial_word_set, interstitial_filter, len_delta=1
         )
     )
 
@@ -132,8 +133,8 @@ def normal(clue: str, num: int = 5) -> None:
     """
     Print the results of a standard anagram.
     """
-    normal_word_set = read_words(cdlegal_filter)
-    print(check_anagrams_longest(clue, normal_word_set, num))
+    normal_word_set = filter_word_list(cdlegal_filter)
+    print(nlongest_anagrams(clue, normal_word_set, num))
 
 
 if __name__ == "__main__":
