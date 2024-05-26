@@ -28,7 +28,7 @@ def filter_word_list(wfilter: FilterType) -> set[str]:
         for line in f:
             w = line.strip()
             if wfilter(w):
-                words.add(w)
+                words.add(w.lower())
     return words
 
 
@@ -150,9 +150,10 @@ if __name__ == "__main__":
         help="Return a different number of anagrams (default: 5)",
     )
     args = parser.parse_args()
+    clue = args.clue.lower()
     if args.conundrum:
-        conundrum(args.clue, args.num)
+        conundrum(clue, args.num)
     elif args.interstitial:
-        interstitial(args.clue, args.num)
+        interstitial(clue, args.num)
     else:
-        normal(args.clue, args.num)
+        normal(clue, args.num)
