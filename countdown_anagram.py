@@ -66,7 +66,10 @@ def nlongest_anagrams(
             perm = "".join(perm_chars)
             if perm in word_set:
                 matched.add(perm)
-    return sorted(matched, key=len, reverse=True)[:n_longest]
+    longest_matches = sorted(matched, key=len, reverse=True)[:n_longest]
+    return sorted(
+        [(m, len(m)) for m in longest_matches], key=lambda x: (x[1], x[0]), reverse=True
+    )
 
 
 def all_matching_conundrums(
