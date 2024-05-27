@@ -11,8 +11,8 @@ from pprint import pprint
 from typing import Callable, Union
 
 # Types:
-type FilterType = Callable[[str], bool]
-type Maybe[T] = Union[T, None]
+FilterType = Callable[[str], bool]
+Answer = list[Union[str, int]]
 # Globals:
 WORD_LIST = "/usr/share/dict/words"
 
@@ -55,7 +55,7 @@ def interstitial_filter(x: str) -> bool:
 
 def nlongest_anagrams(
     clue: str, word_set: set[str], n_longest: int = 1, lower_bound: int = 2
-) -> Maybe[set[str]]:
+) -> list[Answer]:
     """
     Find the longest anagrams matching a clue.
     """
@@ -66,7 +66,7 @@ def nlongest_anagrams(
             if perm in word_set:
                 matched.add(perm)
     longest_matches = sorted(matched, key=len, reverse=True)[:n_longest]
-    return sorted([(m, len(m)) for m in longest_matches], key=lambda x: (x[1], x[0]), reverse=True)
+    return sorted([[m, len(m)] for m in longest_matches], key=lambda x: (x[1], x[0]), reverse=True)
 
 
 def all_matching_conundrums(
@@ -75,7 +75,7 @@ def all_matching_conundrums(
     filter_: FilterType,
     len_delta: int = 0,
     n_longest: int = 1,
-) -> set[str]:
+) -> list[Answer]:
     """
     Return all of the matching anagrams.
 
@@ -150,10 +150,9 @@ if __name__ == "__main__":
         help="Return a different number of anagrams (default: 5)",
     )
     args = parser.parse_args()
-    clue = args.clue.lower()
     if args.conundrum:
-        conundrum(clue, args.num)
+        conundrum(args.clue.lower(), args.num)
     elif args.interstitial:
-        interstitial(clue, args.num)
+        interstitial(args.clue.lower(), args.num)
     else:
-        normal(clue, args.num)
+        normal(args.clue.lower(), args.num)
