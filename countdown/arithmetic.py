@@ -63,9 +63,7 @@ def solve_single_ordering(target: int, inputs):
     Solve a single ordering.
     """
     operator_slots = len(inputs) - 1
-    for op_ordering in itertools.combinations_with_replacement(
-        CD_ARITHMETIC_OPERATIONS, operator_slots
-    ):
+    for op_ordering in itertools.product(CD_ARITHMETIC_OPERATIONS, repeat=operator_slots):
         value = inputs[0]
         for i in range(operator_slots):
             value = op_ordering[i][1](value, inputs[i + 1])
