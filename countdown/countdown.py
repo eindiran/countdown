@@ -19,6 +19,7 @@ AnagramAnswer = list[Union[str, int]]
 NullableInt = Union[int, None]
 # Globals:
 WORD_LIST = "/usr/share/dict/words"
+## SEE HERE: http://thecountdownpage.com/letters.htm
 VOWEL_WEIGHTS = {
     "a": 15,
     "e": 21,
@@ -290,14 +291,14 @@ def main() -> None:
     arithmetic.add_argument("inputs", type=int, nargs="+", help="Input integers")
     anagram = subparsers.add_parser("anagram", help="Command to run a single anagram solution")
     anagram.add_argument("clue", type=str, help="Input word / clue")
-    controller_group = anagram.add_mutually_exclusive_group()
-    controller_group.add_argument(
+    anagram_controller_group = anagram.add_mutually_exclusive_group()
+    anagram_controller_group.add_argument(
         "-i",
         "--interstitial",
         action="store_true",
         help="Toggle on interstitial conundrums",
     )
-    controller_group.add_argument(
+    anagram_controller_group.add_argument(
         "-c",
         "--conundrum",
         action="store_true",
@@ -317,22 +318,22 @@ def main() -> None:
         "-t", "--type", choices=["anagram", "arithmetic"], default="anagram", required=False
     )
     args = parser.parse_args()
-    var_args = vars(args)
-    if var_args.get("loops"):
+    vars_args = vars(args)
+    if vars_args.get("loops"):
         if args.type == "anagram":
             anagram_loop_mode(args.loops)
         elif args.type == "arithmetic":
             arithmetic_loop_mode(args.loops)
         else:
             raise ValueError(f"Unknown loop mode type: {args.type}")
-    elif var_args.get("num"):
+    elif vars_args.get("num"):
         if args.conundrum:
             conundrum(args.clue.lower(), args.num)
         elif args.interstitial:
             interstitial(args.clue.lower(), args.num)
         else:
             normal(args.clue.lower(), args.num)
-    elif var_args.get("target"):
+    elif vars_args.get("target"):
         print(solve_cd_arithmetic(args.target, args.inputs))
     else:
         parser.print_help()
