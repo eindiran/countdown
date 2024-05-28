@@ -307,8 +307,9 @@ def cd_ocr_arithmetic(img_path: str, debug: bool) -> None:
     the arithmetic solution.
     """
     reader = easyocr.Reader(["en"])
-    detected = reader.readtext(img_path)
+    detected = reader.readtext(img_path, allowlist="0123456789")
     if debug:
+        pprint(detected)
         show_detected_text(img_path, detected)
     target = None
     inputs: list[int] = []
@@ -329,8 +330,11 @@ def cd_ocr_anagram(img_path: str, debug: bool) -> None:
     the anagram solution.
     """
     reader = easyocr.Reader(["en"])
-    detected = reader.readtext(img_path)
+    detected = reader.readtext(
+        img_path, allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ", text_threshold=0.55, contrast_ths=0.25
+    )
     if debug:
+        pprint(detected)
         show_detected_text(img_path, detected)
     letters: list[str] = []
     for d in detected:
