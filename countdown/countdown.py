@@ -54,6 +54,9 @@ CONSONANT_WEIGHTS = {
     "y": 1,
     "z": 1,
 }
+RED_RGB_TUPLE = (255, 0, 0)
+GREEN_RGB_TUPLE = (0, 255, 0)
+BLUE_RGB_TUPLE = (0, 0, 255)
 
 
 def filter_word_list(wfilter: FilterType) -> set[str]:
@@ -233,10 +236,12 @@ ARITHMETIC_OPERATIONS = (
 )
 
 
-def solve_single_ordering(target: int, inputs):
+def solve_single_ordering(target: NullableInt, inputs):
     """
     Solve a single ordering.
     """
+    if target is None:
+        raise ValueError("Can't solve ordering with null target")
     operator_slots = len(inputs) - 1
     for op_ordering in itertools.product(ARITHMETIC_OPERATIONS, repeat=operator_slots):
         value = inputs[0]
@@ -247,8 +252,10 @@ def solve_single_ordering(target: int, inputs):
     return []
 
 
-def solve_cd_arithmetic(target: int, inputs) -> str:
+def solve_cd_arithmetic(target: NullableInt, inputs) -> str:
     """Solve a Countdown arithmetic problem."""
+    if target is None:
+        raise ValueError("Can't solve ordering with null target")
     for i in range(1, len(inputs) + 1):
         for perm in itertools.permutations(inputs, i):
             sol = solve_single_ordering(target, perm)
@@ -281,41 +288,56 @@ def arithmetic_loop_mode(loops: int) -> None:
         print(f"Result: {res if res else 'no solution found'}\n\n")
 
 
-def show_detected_text(img_path: str, detected) -> None:
+def show_detected_text(img_path: str, detected, color=GREEN_RGB_TUPLE, thickness: int = 3) -> None:
     """
     Tool for showing detected text via opencv and matplotlib.
     """
-    img = cv2.imread(img_path)
+    img = cv2.imread(img_path)  # pylint: disable=no-member
     for d in detected:
         top_left = tuple(d[0][0])
         bottom_right = tuple(d[0][2])
-        img = cv2.rectangle(img, top_left, bottom_right, (0, 255, 0), 3)
+        img = cv2.rectangle(img, top_left, bottom_right, color, thickness)  # pylint: disable=no-member
     plot.imshow(img)
     plot.show()
 
 
-def cd_ocr_arithmetic(img_path: str, debug: bool) -> str:
+def cd_ocr_arithmetic(img_path: str, debug: bool) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
-    the text in the image.
+    the arithmetic solution.
     """
     reader = easyocr.Reader(["en"])
     detected = reader.readtext(img_path)
     if debug:
         show_detected_text(img_path, detected)
-    return detected
+    target = None
+    inputs: list[int] = []
+    for d in detected:
+        # Target first
+        if not target:
+            target = int(d[1])
+        else:
+            inputs.extend([int(_) for _ in d[1].replace("/", " ").replace("|", " ").split()])
+    print(f"Detected target: {target}")
+    print(f"Detected inputs: {inputs}")
+    print(solve_cd_arithmetic(target, inputs))
 
 
-def cd_ocr_anagram(img_path: str, debug: bool) -> str:
+def cd_ocr_anagram(img_path: str, debug: bool) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
-    the text in the image.
+    the anagram solution.
     """
     reader = easyocr.Reader(["en"])
     detected = reader.readtext(img_path)
     if debug:
         show_detected_text(img_path, detected)
-    return detected
+    letters: list[str] = []
+    for d in detected:
+        letters.append(d[1].lower())
+    clue = "".join(letters)
+    print(f"Detected clue: {clue}")
+    normal(clue, 5)
 
 
 # pylint: disable=too-many-branches
@@ -394,9 +416,9 @@ def main() -> None:
             raise ValueError(f"Unknown loop mode type: {args.type}")
     elif vars_args.get("image_path"):
         if args.type == "anagram":
-            print(cd_ocr_arithmetic(args.image_path, args.debug))
+            cd_ocr_anagram(args.image_path, args.debug)
         elif args.type == "arithmetic":
-            print(cd_ocr_anagram(args.image_path, args.debug))
+            cd_ocr_arithmetic(args.image_path, args.debug)
         else:
             raise ValueError(f"Unknown loop mode type: {args.type}")
     elif vars_args.get("num"):
