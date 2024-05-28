@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-countdown_anagram.py
+anagram.py
 ------------
 
 Countdown anagram solver.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-countdown_arithmetic.py
+arithmetic.py
 -----------------
 
 Solver for the arithmetic puzzles on Countdown.
