@@ -1,0 +1,343 @@
+#!/usr/bin/env python3
+"""
+countdown.py
+------------
+
+Countdown anagram and arithmetic puzzle solver.
+"""
+
+import argparse
+import itertools
+import random
+import sys
+from pprint import pprint
+from typing import Callable, Union
+
+# Types:
+FilterType = Callable[[str], bool]
+AnagramAnswer = list[Union[str, int]]
+NullableInt = Union[int, None]
+# Globals:
+WORD_LIST = "/usr/share/dict/words"
+VOWEL_WEIGHTS = {
+    "a": 15,
+    "e": 21,
+    "i": 13,
+    "o": 13,
+    "u": 5,
+}
+CONSONANT_WEIGHTS = {
+    "b": 2,
+    "c": 3,
+    "d": 6,
+    "f": 2,
+    "g": 3,
+    "h": 2,
+    "j": 1,
+    "k": 1,
+    "l": 5,
+    "m": 4,
+    "n": 8,
+    "p": 4,
+    "q": 1,
+    "r": 9,
+    "s": 9,
+    "t": 9,
+    "v": 1,
+    "w": 1,
+    "x": 1,
+    "y": 1,
+    "z": 1,
+}
+
+
+def filter_word_list(wfilter: FilterType) -> set[str]:
+    """
+    Return a list of words matching a filter,
+    from WORD_LIST
+    """
+    words = set()
+    with open(WORD_LIST, "r", encoding="utf8") as f:
+        for line in f:
+            w = line.strip()
+            if wfilter(w):
+                words.add(w.lower())
+    return words
+
+
+def cd_legal_filter(x: str) -> bool:
+    """
+    Filter to get all legal Countdown words (no
+    proper nouns).
+    """
+    return not x[0].isupper() and len(x) < 10
+
+
+def conundrum_filter(x: str) -> bool:
+    """
+    We only want nine letter words that are not capitalized.
+    """
+    return len(x) == 9 and cd_legal_filter(x)
+
+
+def interstitial_filter(x: str) -> bool:
+    """
+    We only want 8 and 9 letter words that are not capitalized.
+    """
+    return len(x) in {8, 9} and cd_legal_filter(x)
+
+
+def nlongest_anagrams(
+    clue: str, word_set: set[str], n_longest: int = 1, lower_bound: int = 2
+) -> list[AnagramAnswer]:
+    """
+    Find the longest anagrams matching a clue.
+    """
+    matched: set[str] = set()
+    for i in range(lower_bound, len(clue) + 1):
+        for perm_chars in itertools.permutations(clue, i):
+            perm = "".join(perm_chars)
+            if perm in word_set:
+                matched.add(perm)
+    longest_matches = sorted(matched, key=len, reverse=True)[:n_longest]
+    return sorted([[m, len(m)] for m in longest_matches], key=lambda x: (x[1], x[0]), reverse=True)
+
+
+def all_matching_conundrums(
+    clue: str,
+    word_set: set[str],
+    filter_: FilterType,
+    len_delta: int = 0,
+    n_longest: int = 1,
+) -> list[AnagramAnswer]:
+    """
+    Return all of the matching anagrams.
+
+    Throws AssertionError on clue not matching the filter.
+    """
+    assert filter_(clue)
+    lower_bound = len(clue) - len_delta
+    return nlongest_anagrams(clue, word_set, n_longest, lower_bound)
+
+
+def conundrum(clue: str, num: int = 1) -> None:
+    """
+    Print results for a final conundrum clue.
+    """
+    conundrum_word_set = filter_word_list(conundrum_filter)
+    pprint(
+        all_matching_conundrums(
+            clue, conundrum_word_set, conundrum_filter, len_delta=0, n_longest=num
+        )
+    )
+
+
+def interstitial(clue: str, num: int = 1) -> None:
+    """
+    Print results for an interstitial conundrum clue.
+
+    Use len_delta since they can be 8 or 9 chars long.
+    """
+    interstitial_word_set = filter_word_list(interstitial_filter)
+    pprint(
+        all_matching_conundrums(
+            clue, interstitial_word_set, interstitial_filter, len_delta=1, n_longest=num
+        )
+    )
+
+
+def normal(clue: str, num: int = 5) -> None:
+    """
+    Print the results of a standard anagram.
+    """
+    normal_word_set = filter_word_list(cd_legal_filter)
+    pprint(nlongest_anagrams(clue, normal_word_set, num))
+
+
+def anagram_loop_mode(loops: int) -> None:
+    """
+    Launch into looping over runs.
+    """
+    normal_word_set = filter_word_list(cd_legal_filter)
+    for _ in range(loops):
+        num_vowels = random.choice([3, 4, 5, 6])
+        num_consonants = 9 - num_vowels
+        letters = []
+        letters.extend(
+            random.choices(
+                [str(x) for x in VOWEL_WEIGHTS],
+                weights=[int(x) for x in VOWEL_WEIGHTS.values()],
+                k=num_vowels,
+            )
+        )
+        letters.extend(
+            random.choices(
+                [str(x) for x in CONSONANT_WEIGHTS],
+                weights=[int(x) for x in CONSONANT_WEIGHTS.values()],
+                k=num_consonants,
+            )
+        )
+        print(f"Letters: {' '.join(letters)}")
+        pprint(nlongest_anagrams("".join(letters), normal_word_set, 3))
+        print("")
+
+
+def _add(a: NullableInt, b: NullableInt) -> NullableInt:
+    """
+    Addition fn.
+    """
+    if a is None or b is None:
+        return None
+    return a + b
+
+
+def _sub(a: NullableInt, b: NullableInt) -> NullableInt:
+    """
+    Subtraction function.
+    """
+    if a is None or b is None:
+        return None
+    return a - b
+
+
+def _mul(a: NullableInt, b: NullableInt) -> NullableInt:
+    """
+    Multiplication function.
+    """
+    if a is None or b is None:
+        return None
+    return a * b
+
+
+def _div(a: NullableInt, b: NullableInt) -> NullableInt:
+    """
+    Division function.
+    """
+    if a is None or b is None:
+        return None
+    if a % b == 0:
+        return a // b
+    return None
+
+
+ARITHMETIC_OPERATIONS = (
+    ("+", _add),
+    ("-", _sub),
+    ("*", _mul),
+    ("/", _div),
+)
+
+
+def solve_single_ordering(target: int, inputs):
+    """
+    Solve a single ordering.
+    """
+    operator_slots = len(inputs) - 1
+    for op_ordering in itertools.product(ARITHMETIC_OPERATIONS, repeat=operator_slots):
+        value = inputs[0]
+        for i in range(operator_slots):
+            value = op_ordering[i][1](value, inputs[i + 1])
+        if value == target:
+            return [o[0] for o in op_ordering]
+    return []
+
+
+def solve_cd_arithmetic(target: int, inputs) -> str:
+    """Solve a Countdown arithmetic problem."""
+    for i in range(1, len(inputs) + 1):
+        for perm in itertools.permutations(inputs, i):
+            sol = solve_single_ordering(target, perm)
+            if sol:
+                final: list[str] = [str(perm[0])]
+                for i in range(len(perm) - 1):
+                    final.append(sol[i])
+                    final.append(str(perm[i + 1]))
+                return " ".join(final)
+    return ""
+
+
+def arithmetic_loop_mode(loops: int) -> None:
+    """
+    Launch into looping over runs.
+    """
+    for _ in range(loops):
+        target = random.randint(101, 999)
+        inputs = [
+            random.choice([25, 50, 75, 100]),
+            random.choice([25, 50, 75, 100]),
+            random.randint(1, 10),
+            random.randint(1, 10),
+            random.randint(1, 10),
+            random.randint(1, 10),
+        ]
+        print(f"Target: {target}")
+        print(f"Inputs: {inputs}")
+        res = solve_cd_arithmetic(target, inputs)
+        print(f"Result: {res if res else 'no solution found'}\n\n")
+
+
+def main() -> None:
+    """
+    Main function that adds parsers for CLI control.
+    """
+    parser = argparse.ArgumentParser(
+        prog="countdown.py",
+        description="Solve Countdown anagrams and arithmetic puzzles from the CLI",
+    )
+    subparsers = parser.add_subparsers(help="sub-command help")
+    arithmetic = subparsers.add_parser("arithmetic", help="Command to run a single solution")
+    arithmetic.add_argument("target", type=int, help="Target integer")
+    arithmetic.add_argument("inputs", type=int, nargs="+", help="Input integers")
+    anagram = subparsers.add_parser("anagram", help="Command to run a single anagram solution")
+    anagram.add_argument("clue", type=str, help="Input word / clue")
+    controller_group = anagram.add_mutually_exclusive_group()
+    controller_group.add_argument(
+        "-i",
+        "--interstitial",
+        action="store_true",
+        help="Toggle on interstitial conundrums",
+    )
+    controller_group.add_argument(
+        "-c",
+        "--conundrum",
+        action="store_true",
+        help="Toggle on final conundrum",
+    )
+    anagram.add_argument(
+        "-n",
+        "--num",
+        type=int,
+        default=5,
+        required=False,
+        help="Return a different number of anagrams (default: 5)",
+    )
+    loop = subparsers.add_parser("loop", help="Command to loop over random inputs")
+    loop.add_argument("loops", type=int, help="Iniate looping n times over random runs")
+    loop.add_argument(
+        "-t", "--type", choices=["anagram", "arithmetic"], default="anagram", required=False
+    )
+    args = parser.parse_args()
+    var_args = vars(args)
+    if var_args.get("loops"):
+        if args.type == "anagram":
+            anagram_loop_mode(args.loops)
+        elif args.type == "arithmetic":
+            arithmetic_loop_mode(args.loops)
+        else:
+            raise ValueError(f"Unknown loop mode type: {args.type}")
+    elif var_args.get("num"):
+        if args.conundrum:
+            conundrum(args.clue.lower(), args.num)
+        elif args.interstitial:
+            interstitial(args.clue.lower(), args.num)
+        else:
+            normal(args.clue.lower(), args.num)
+    elif var_args.get("target"):
+        print(solve_cd_arithmetic(args.target, args.inputs))
+    else:
+        parser.print_help()
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()
