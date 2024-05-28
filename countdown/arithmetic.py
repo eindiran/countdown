@@ -77,7 +77,7 @@ def solve_single_ordering(target: int, inputs):
 def solve_cdarithmetic(target: int, inputs):
     """Solve a Countdown arithmetic problem."""
     for i in range(1, len(inputs) + 1):
-        for perm in itertools.combinations(inputs, i):
+        for perm in itertools.permutations(inputs, i):
             sol = solve_single_ordering(target, perm)
             if sol:
                 final: list[str] = [str(perm[0])]
