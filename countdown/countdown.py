@@ -13,6 +13,10 @@ import sys
 from pprint import pprint
 from typing import Callable, Union
 
+import cv2
+import easyocr  # type: ignore
+import matplotlib.pyplot as plot  # type: ignore
+
 # Types:
 FilterType = Callable[[str], bool]
 AnagramAnswer = list[Union[str, int]]
@@ -277,6 +281,44 @@ def arithmetic_loop_mode(loops: int) -> None:
         print(f"Result: {res if res else 'no solution found'}\n\n")
 
 
+def show_detected_text(img_path: str, detected) -> None:
+    """
+    Tool for showing detected text via opencv and matplotlib.
+    """
+    img = cv2.imread(img_path)
+    for d in detected:
+        top_left = tuple(d[0][0])
+        bottom_right = tuple(d[0][2])
+        img = cv2.rectangle(img, top_left, bottom_right, (0, 255, 0), 3)
+    plot.imshow(img)
+    plot.show()
+
+
+def cd_ocr_arithmetic(img_path: str, debug: bool) -> str:
+    """
+    Given a path to an image, perform OCR with easyocr and return
+    the text in the image.
+    """
+    reader = easyocr.Reader(["en"])
+    detected = reader.readtext(img_path)
+    if debug:
+        show_detected_text(img_path, detected)
+    return detected
+
+
+def cd_ocr_anagram(img_path: str, debug: bool) -> str:
+    """
+    Given a path to an image, perform OCR with easyocr and return
+    the text in the image.
+    """
+    reader = easyocr.Reader(["en"])
+    detected = reader.readtext(img_path)
+    if debug:
+        show_detected_text(img_path, detected)
+    return detected
+
+
+# pylint: disable=too-many-branches
 def main() -> None:
     """
     Main function that adds parsers for CLI control.
@@ -286,12 +328,16 @@ def main() -> None:
         description="Solve Countdown anagrams and arithmetic puzzles from the CLI",
     )
     subparsers = parser.add_subparsers(help="sub-command help")
-    arithmetic = subparsers.add_parser("arithmetic", help="Command to run a single solution")
-    arithmetic.add_argument("target", type=int, help="Target integer")
-    arithmetic.add_argument("inputs", type=int, nargs="+", help="Input integers")
-    anagram = subparsers.add_parser("anagram", help="Command to run a single anagram solution")
-    anagram.add_argument("clue", type=str, help="Input word / clue")
-    anagram_controller_group = anagram.add_mutually_exclusive_group()
+    arithmetic_subcommand = subparsers.add_parser(
+        "arithmetic", help="Command to run a single solution"
+    )
+    arithmetic_subcommand.add_argument("target", type=int, help="Target integer")
+    arithmetic_subcommand.add_argument("inputs", type=int, nargs="+", help="Input integers")
+    anagram_subcommand = subparsers.add_parser(
+        "anagram", help="Command to run a single anagram solution"
+    )
+    anagram_subcommand.add_argument("clue", type=str, help="Input word / clue")
+    anagram_controller_group = anagram_subcommand.add_mutually_exclusive_group()
     anagram_controller_group.add_argument(
         "-i",
         "--interstitial",
@@ -304,7 +350,7 @@ def main() -> None:
         action="store_true",
         help="Toggle on final conundrum",
     )
-    anagram.add_argument(
+    anagram_subcommand.add_argument(
         "-n",
         "--num",
         type=int,
@@ -312,10 +358,30 @@ def main() -> None:
         required=False,
         help="Return a different number of anagrams (default: 5)",
     )
-    loop = subparsers.add_parser("loop", help="Command to loop over random inputs")
-    loop.add_argument("loops", type=int, help="Iniate looping n times over random runs")
-    loop.add_argument(
-        "-t", "--type", choices=["anagram", "arithmetic"], default="anagram", required=False
+    loop_subcommand = subparsers.add_parser("loop", help="Command to loop over random inputs")
+    loop_subcommand.add_argument("loops", type=int, help="Iniate looping n times over random runs")
+    loop_subcommand.add_argument(
+        "-t",
+        "--type",
+        choices=["anagram", "arithmetic"],
+        default="anagram",
+        required=False,
+        help="Choose which puzzle type to solve",
+    )
+    ocr_subcommand = subparsers.add_parser(
+        "ocr", help="Command for running OCR on a screenshot of Countdown"
+    )
+    ocr_subcommand.add_argument("image_path", type=str, help="Path to Countdown screenshot")
+    ocr_subcommand.add_argument(
+        "-t",
+        "--type",
+        choices=["anagram", "arithmetic"],
+        default="anagram",
+        required=False,
+        help="Choose which puzzle type to solve",
+    )
+    ocr_subcommand.add_argument(
+        "-d", "--debug", action="store_true", help="Show the detected text via matplotlib"
     )
     args = parser.parse_args()
     vars_args = vars(args)
@@ -324,6 +390,13 @@ def main() -> None:
             anagram_loop_mode(args.loops)
         elif args.type == "arithmetic":
             arithmetic_loop_mode(args.loops)
+        else:
+            raise ValueError(f"Unknown loop mode type: {args.type}")
+    elif vars_args.get("image_path"):
+        if args.type == "anagram":
+            print(cd_ocr_arithmetic(args.image_path, args.debug))
+        elif args.type == "arithmetic":
+            print(cd_ocr_anagram(args.image_path, args.debug))
         else:
             raise ValueError(f"Unknown loop mode type: {args.type}")
     elif vars_args.get("num"):
