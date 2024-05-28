@@ -7,6 +7,7 @@ Countdown anagram solver.
 """
 
 import itertools
+import random
 from pprint import pprint
 from typing import Callable, Union
 
@@ -15,6 +16,36 @@ FilterType = Callable[[str], bool]
 Answer = list[Union[str, int]]
 # Globals:
 WORD_LIST = "/usr/share/dict/words"
+VOWEL_WEIGHTS = {
+    "a": 15,
+    "e": 21,
+    "i": 13,
+    "o": 13,
+    "u": 5,
+}
+CONSONANT_WEIGHTS = {
+    "b": 2,
+    "c": 3,
+    "d": 6,
+    "f": 2,
+    "g": 3,
+    "h": 2,
+    "j": 1,
+    "k": 1,
+    "l": 5,
+    "m": 4,
+    "n": 8,
+    "p": 4,
+    "q": 1,
+    "r": 9,
+    "s": 9,
+    "t": 9,
+    "v": 1,
+    "w": 1,
+    "x": 1,
+    "y": 1,
+    "z": 1,
+}
 
 
 def filter_word_list(wfilter: FilterType) -> set[str]:
@@ -120,6 +151,34 @@ def normal(clue: str, num: int = 5) -> None:
     pprint(nlongest_anagrams(clue, normal_word_set, num))
 
 
+def loop_mode(loops: int) -> None:
+    """
+    Launch into looping over runs.
+    """
+    normal_word_set = filter_word_list(cdlegal_filter)
+    for _ in range(loops):
+        num_vowels = random.choice([3, 4, 5, 6])
+        num_consonants = 9 - num_vowels
+        letters = []
+        letters.extend(
+            random.choices(
+                [str(x) for x in VOWEL_WEIGHTS.keys()],
+                weights=[int(x) for x in VOWEL_WEIGHTS.values()],
+                k=num_vowels,
+            )
+        )
+        letters.extend(
+            random.choices(
+                [str(x) for x in CONSONANT_WEIGHTS.keys()],
+                weights=[int(x) for x in CONSONANT_WEIGHTS.values()],
+                k=num_consonants,
+            )
+        )
+        print(f"Letters: {' '.join(letters)}")
+        pprint(nlongest_anagrams("".join(letters), normal_word_set, 3))
+        print("")
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -127,8 +186,10 @@ if __name__ == "__main__":
         prog="countdown_anagram.py",
         description="Solve Countdown conundrums from the CLI",
     )
-    parser.add_argument("clue", type=str, help="Input word / clue")
-    controller_group = parser.add_mutually_exclusive_group()
+    subparsers = parser.add_subparsers()
+    solve = subparsers.add_parser("solve", help="Command to run a single solution")
+    solve.add_argument("clue", type=str, help="Input word / clue")
+    controller_group = solve.add_mutually_exclusive_group()
     controller_group.add_argument(
         "-i",
         "--interstitial",
@@ -141,7 +202,7 @@ if __name__ == "__main__":
         action="store_true",
         help="Toggle on final conundrum",
     )
-    parser.add_argument(
+    solve.add_argument(
         "-n",
         "--num",
         type=int,
@@ -149,8 +210,12 @@ if __name__ == "__main__":
         required=False,
         help="Return a different number of anagrams (default: 5)",
     )
+    loop = subparsers.add_parser("loop", help="Command to loop over random inputs")
+    loop.add_argument("loops", type=int, help="Iniate looping n times over random runs")
     args = parser.parse_args()
-    if args.conundrum:
+    if vars(args).get("loops"):
+        loop_mode(args.loops)
+    elif args.conundrum:
         conundrum(args.clue.lower(), args.num)
     elif args.interstitial:
         interstitial(args.clue.lower(), args.num)
