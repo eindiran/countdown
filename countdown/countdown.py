@@ -300,16 +300,19 @@ def show_detected_text(image, detected, color=GREEN_RGB_TUPLE, thickness: int = 
     plot.show()
 
 
-def preprocess_image(img_path: str, preprocess: bool):
+def preprocess_image(img_path: str, preprocess: bool, greyscale: bool = False):
     """
     Run image pre-processing on the image.
     """
     if not preprocess:
         return cv2.imread(img_path)  # pylint: disable=no-member
-    image = cv2.imread(img_path)  # pylint: disable=no-member
-    # Split out blue only:
-    _, _, image = cv2.split(image)  # pylint: disable=no-member
-    # image = cv2.equalizeHist(image)  # pylint: disable=no-member
+    if greyscale:
+        image = cv2.imread(img_path, 0)  # pylint: disable=no-member
+        image = cv2.equalizeHist(image)  # pylint: disable=no-member
+    else:
+        image = cv2.imread(img_path)  # pylint: disable=no-member
+        # Split out blue only:
+        _, _, image = cv2.split(image)  # pylint: disable=no-member
     image = cv2.GaussianBlur(image, (5, 5), 1)  # pylint: disable=no-member
     return image
 
@@ -320,6 +323,7 @@ def cd_ocr_arithmetic(
     recog_network: str = "standard",
     detect_network: str = "craft",
     preprocess: bool = False,
+    greyscale: bool = False,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -328,7 +332,7 @@ def cd_ocr_arithmetic(
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
-    image = preprocess_image(img_path, preprocess)
+    image = preprocess_image(img_path, preprocess, greyscale=greyscale)
     detected = reader.readtext(image, allowlist="0123456789 |/")
     if debug:
         pprint(detected)
@@ -352,6 +356,7 @@ def cd_ocr_anagram(
     recog_network: str = "standard",
     detect_network: str = "craft",
     preprocess: bool = False,
+    greyscale: bool = False,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -360,7 +365,7 @@ def cd_ocr_anagram(
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
-    image = preprocess_image(img_path, preprocess)
+    image = preprocess_image(img_path, preprocess, greyscale=greyscale)
     detected = reader.readtext(
         image, allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ", text_threshold=0.55, contrast_ths=0.25
     )
@@ -457,6 +462,9 @@ def main() -> None:
         "-p", "--preprocess", action="store_true", help="Preprocess the image"
     )
     ocr_subcommand.add_argument(
+        "-g", "--greyscale", action="store_true", help="Load the image greyscale"
+    )
+    ocr_subcommand.add_argument(
         "-d", "--debug", action="store_true", help="Show the detected text via matplotlib"
     )
     args = parser.parse_args()
@@ -476,6 +484,7 @@ def main() -> None:
                 recog_network=args.recog_network,
                 detect_network=args.detect_network,
                 preprocess=args.preprocess,
+                greyscale=args.greyscale,
             )
         elif args.type == "arithmetic":
             cd_ocr_arithmetic(
@@ -484,6 +493,7 @@ def main() -> None:
                 recog_network=args.recog_network,
                 detect_network=args.detect_network,
                 preprocess=args.preprocess,
+                greyscale=args.greyscale,
             )
         else:
             raise ValueError(f"Unknown loop mode type: {args.type}")
