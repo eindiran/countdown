@@ -10,6 +10,8 @@ import argparse
 import itertools
 import os
 import random
+import statistics
+import string
 import sys
 import threading
 import time
@@ -60,6 +62,8 @@ CONSONANT_WEIGHTS = {
 RED_RGB_TUPLE = (255, 0, 0)
 GREEN_RGB_TUPLE = (0, 255, 0)
 BLUE_RGB_TUPLE = (0, 0, 255)
+ANAGRAM_ALLOWLIST = string.ascii_uppercase
+ARITHMETIC_ALLOWLIST = string.digits + " |/"
 
 
 def filter_word_list(wfilter: FilterType) -> set[str]:
@@ -108,8 +112,6 @@ def all_matching_conundrums(
 ) -> list[AnagramAnswer]:
     """
     Return all of the matching anagrams.
-
-    Throws AssertionError on clue not matching the filter.
     """
     lower_bound = len(clue) - len_delta
     return nlongest_anagrams(clue, word_set, n_longest, lower_bound)
@@ -166,6 +168,17 @@ def anagram_loop_mode(loops: int, debug: bool = False) -> None:
         if debug:
             pprint(res)
             print("")
+    print("Loops completed!")
+    print(f"Total runs: {loops}")
+    stats = sorted(stats)
+    print(f"Arithmetic mean score: {statistics.mean(stats)}")
+    print(f"Median score: {statistics.median(stats)}")
+    print(f"Multimode score: {statistics.multimode(stats)}")
+    print(f"Max score: {max(stats)}")
+    print(f"Min score: {min(stats)}")
+    print(f"Quartiles: {statistics.quantiles(stats, n=4)}")
+    print(f"Population standard deviation: {statistics.pstdev(stats)}")
+    print(f"Population variance: {statistics.pvariance(stats)}")
 
 
 def _add(a: NullableInt, b: NullableInt) -> NullableInt:
@@ -250,6 +263,7 @@ def arithmetic_loop_mode(loops: int, debug: bool = False) -> None:
     """
     Launch into looping over runs.
     """
+    results = []
     for l in range(loops):
         target = random.randint(101, 999)
         inputs = [
@@ -265,8 +279,13 @@ def arithmetic_loop_mode(loops: int, debug: bool = False) -> None:
             print(f"Target: {target}")
             print(f"Inputs: {inputs}")
         res = solve_cd_arithmetic(target, inputs)
+        results.append(res)
         if debug:
             print(f"Result: {res if res else 'no solution found'}\n\n")
+    print("Loops completed!")
+    print(f"Total runs: {loops}")
+    print(f"Total solutions found: {sum(1 for _ in results if _)}")
+    print(f"Total solutions not found: {sum(1 for _ in results if not _)}")
 
 
 def autoclosing_pyplot_fig(image, duration_s: int = 10) -> None:
@@ -323,7 +342,7 @@ def preprocess_image(img_path: str, preprocess: bool, greyscale: bool = False):
 
 
 # pylint: disable=too-many-arguments
-def cd_ocr_arithmetic(
+def cd_screenshot_ocr_arithmetic(
     img_path: str,
     debug: bool,
     recog_network: str = "standard",
@@ -340,7 +359,7 @@ def cd_ocr_arithmetic(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
     image = preprocess_image(img_path, preprocess, greyscale=greyscale)
-    detected = reader.readtext(image, allowlist="0123456789 |/")
+    detected = reader.readtext(image, allowlist=ARITHMETIC_ALLOWLIST)
     if debug:
         pprint(detected)
         # Show a red line if we are pre-processing, otherwise use lime green
@@ -360,8 +379,8 @@ def cd_ocr_arithmetic(
     print(f"Result: {res if res else 'no solution found'}\n")
 
 
-# pylint: disable=too-many-arguments
-def cd_ocr_anagram(
+# pylint: disable=too-many-arguments, too-many-locals
+def cd_screenshot_ocr_anagram(
     img_path: str,
     debug: bool,
     recog_network: str = "standard",
@@ -369,6 +388,8 @@ def cd_ocr_anagram(
     preprocess: bool = True,
     greyscale: bool = False,
     display_length: NullableInt = None,
+    text_threshold: float = 0.55,
+    contrast_threshold: float = 0.25,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -379,7 +400,10 @@ def cd_ocr_anagram(
     )
     image = preprocess_image(img_path, preprocess, greyscale=greyscale)
     detected = reader.readtext(
-        image, allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ", text_threshold=0.55, contrast_ths=0.25
+        image,
+        allowlist=ANAGRAM_ALLOWLIST,
+        text_threshold=text_threshold,
+        contrast_ths=contrast_threshold,
     )
     if debug:
         pprint(detected)
@@ -446,6 +470,13 @@ def main() -> None:
         action="store_true",
         help="Print complete debug info for each item in the loop",
     )
+    video_subcommand = subparsers.add_parser(
+        "video", help="Command for running OCR on a video of an episode of Countdown"
+    )
+    video_subcommand.add_argument("video_path", type=str, help="Path to Countdown video")
+    video_subcommand.add_argument(
+        "-d", "--debug", action="store_true", help="Video OCR debugging info"
+    )
     ocr_subcommand = subparsers.add_parser(
         "ocr", help="Command for running OCR on a screenshot of Countdown"
     )
@@ -504,6 +535,13 @@ def main() -> None:
         else:
             # args.type == "arithmetic"
             arithmetic_loop_mode(args.loops, args.debug)
+    elif vars_args.get("video_path"):
+        # Validate the video file:
+        if not os.path.isfile(args.video_path):
+            print(f"<ERROR> Path to video file {args.video_path} does not exist")
+            ocr_subcommand.print_help()
+            sys.exit(1)
+        print(f"Proceeding with video file: {args.video_path}")
     elif vars_args.get("image_path"):
         # Validate the image file:
         if not os.path.isfile(args.image_path):
@@ -511,7 +549,7 @@ def main() -> None:
             ocr_subcommand.print_help()
             sys.exit(1)
         if args.type == "anagram":
-            cd_ocr_anagram(
+            cd_screenshot_ocr_anagram(
                 args.image_path,
                 args.debug,
                 recog_network=args.recog_network,
@@ -522,7 +560,7 @@ def main() -> None:
             )
         else:
             # args.type == "arithmetic"
-            cd_ocr_arithmetic(
+            cd_screenshot_ocr_arithmetic(
                 args.image_path,
                 args.debug,
                 recog_network=args.recog_network,
