@@ -311,9 +311,7 @@ def cd_ocr_arithmetic(
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
-    detected = reader.readtext(
-        img_path, allowlist="0123456789", text_threshold=0.55, contrast_ths=0.25
-    )
+    detected = reader.readtext(img_path, allowlist="0123456789 |/")
     if debug:
         pprint(detected)
         show_detected_text(img_path, detected)
