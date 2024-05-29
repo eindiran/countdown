@@ -301,13 +301,19 @@ def show_detected_text(img_path: str, detected, color=GREEN_RGB_TUPLE, thickness
     plot.show()
 
 
-def cd_ocr_arithmetic(img_path: str, debug: bool) -> None:
+def cd_ocr_arithmetic(
+    img_path: str, debug: bool, recog_network: str = "standard", detect_network: str = "craft"
+) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
     the arithmetic solution.
     """
-    reader = easyocr.Reader(["en"])
-    detected = reader.readtext(img_path, allowlist="0123456789")
+    reader = easyocr.Reader(
+        ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
+    )
+    detected = reader.readtext(
+        img_path, allowlist="0123456789", text_threshold=0.55, contrast_ths=0.25
+    )
     if debug:
         pprint(detected)
         show_detected_text(img_path, detected)
@@ -324,12 +330,16 @@ def cd_ocr_arithmetic(img_path: str, debug: bool) -> None:
     print(solve_cd_arithmetic(target, inputs))
 
 
-def cd_ocr_anagram(img_path: str, debug: bool) -> None:
+def cd_ocr_anagram(
+    img_path: str, debug: bool, recog_network: str = "standard", detect_network: str = "craft"
+) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
     the anagram solution.
     """
-    reader = easyocr.Reader(["en"])
+    reader = easyocr.Reader(
+        ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
+    )
     detected = reader.readtext(
         img_path, allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ", text_threshold=0.55, contrast_ths=0.25
     )
@@ -407,6 +417,22 @@ def main() -> None:
         help="Choose which puzzle type to solve",
     )
     ocr_subcommand.add_argument(
+        "-r",
+        "--recog_network",
+        choices=["standard", "english_g2", "latin_g2", "latin_g1"],
+        default="standard",
+        required=False,
+        help="Choose the recognition network for EasyOCR from the CLI",
+    )
+    ocr_subcommand.add_argument(
+        "-e",
+        "--detect_network",
+        choices=["craft", "dbnet18"],
+        default="craft",
+        required=False,
+        help="Choose the detect network for EasyOCR from the CLI",
+    )
+    ocr_subcommand.add_argument(
         "-d", "--debug", action="store_true", help="Show the detected text via matplotlib"
     )
     args = parser.parse_args()
@@ -420,9 +446,19 @@ def main() -> None:
             raise ValueError(f"Unknown loop mode type: {args.type}")
     elif vars_args.get("image_path"):
         if args.type == "anagram":
-            cd_ocr_anagram(args.image_path, args.debug)
+            cd_ocr_anagram(
+                args.image_path,
+                args.debug,
+                recog_network=args.recog_network,
+                detect_network=args.detect_network,
+            )
         elif args.type == "arithmetic":
-            cd_ocr_arithmetic(args.image_path, args.debug)
+            cd_ocr_arithmetic(
+                args.image_path,
+                args.debug,
+                recog_network=args.recog_network,
+                detect_network=args.detect_network,
+            )
         else:
             raise ValueError(f"Unknown loop mode type: {args.type}")
     elif vars_args.get("num"):
