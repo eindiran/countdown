@@ -15,7 +15,7 @@ import time
 from pprint import pprint
 from typing import Callable, Union
 
-import cv2
+import cv2  # type: ignore
 import easyocr  # type: ignore
 import matplotlib.pyplot as plot  # type: ignore
 
