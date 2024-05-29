@@ -288,21 +288,38 @@ def arithmetic_loop_mode(loops: int) -> None:
         print(f"Result: {res if res else 'no solution found'}\n\n")
 
 
-def show_detected_text(img_path: str, detected, color=GREEN_RGB_TUPLE, thickness: int = 3) -> None:
+def show_detected_text(image, detected, color=GREEN_RGB_TUPLE, thickness: int = 3) -> None:
     """
     Tool for showing detected text via opencv and matplotlib.
     """
-    img = cv2.imread(img_path)  # pylint: disable=no-member
     for d in detected:
         top_left = tuple(d[0][0])
         bottom_right = tuple(d[0][2])
-        img = cv2.rectangle(img, top_left, bottom_right, color, thickness)  # pylint: disable=no-member
-    plot.imshow(img)
+        image = cv2.rectangle(image, top_left, bottom_right, color, thickness)  # pylint: disable=no-member
+    plot.imshow(image)
     plot.show()
 
 
+def preprocess_image(img_path: str, preprocess: bool):
+    """
+    Run image pre-processing on the image.
+    """
+    if not preprocess:
+        return cv2.imread(img_path)  # pylint: disable=no-member
+    image = cv2.imread(img_path)  # pylint: disable=no-member
+    # Split out blue only:
+    _, _, image = cv2.split(image)  # pylint: disable=no-member
+    # image = cv2.equalizeHist(image)  # pylint: disable=no-member
+    image = cv2.GaussianBlur(image, (5, 5), 1)  # pylint: disable=no-member
+    return image
+
+
 def cd_ocr_arithmetic(
-    img_path: str, debug: bool, recog_network: str = "standard", detect_network: str = "craft"
+    img_path: str,
+    debug: bool,
+    recog_network: str = "standard",
+    detect_network: str = "craft",
+    preprocess: bool = False,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -311,10 +328,11 @@ def cd_ocr_arithmetic(
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
-    detected = reader.readtext(img_path, allowlist="0123456789 |/")
+    image = preprocess_image(img_path, preprocess)
+    detected = reader.readtext(image, allowlist="0123456789 |/")
     if debug:
         pprint(detected)
-        show_detected_text(img_path, detected)
+        show_detected_text(image, detected)
     target = None
     inputs: list[int] = []
     for d in detected:
@@ -329,7 +347,11 @@ def cd_ocr_arithmetic(
 
 
 def cd_ocr_anagram(
-    img_path: str, debug: bool, recog_network: str = "standard", detect_network: str = "craft"
+    img_path: str,
+    debug: bool,
+    recog_network: str = "standard",
+    detect_network: str = "craft",
+    preprocess: bool = False,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -338,12 +360,13 @@ def cd_ocr_anagram(
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
+    image = preprocess_image(img_path, preprocess)
     detected = reader.readtext(
-        img_path, allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ", text_threshold=0.55, contrast_ths=0.25
+        image, allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ", text_threshold=0.55, contrast_ths=0.25
     )
     if debug:
         pprint(detected)
-        show_detected_text(img_path, detected)
+        show_detected_text(image, detected)
     letters: list[str] = []
     for d in detected:
         letters.append(d[1].lower())
@@ -431,6 +454,9 @@ def main() -> None:
         help="Choose the detect network for EasyOCR from the CLI",
     )
     ocr_subcommand.add_argument(
+        "-p", "--preprocess", action="store_true", help="Preprocess the image"
+    )
+    ocr_subcommand.add_argument(
         "-d", "--debug", action="store_true", help="Show the detected text via matplotlib"
     )
     args = parser.parse_args()
@@ -449,6 +475,7 @@ def main() -> None:
                 args.debug,
                 recog_network=args.recog_network,
                 detect_network=args.detect_network,
+                preprocess=args.preprocess,
             )
         elif args.type == "arithmetic":
             cd_ocr_arithmetic(
@@ -456,6 +483,7 @@ def main() -> None:
                 args.debug,
                 recog_network=args.recog_network,
                 detect_network=args.detect_network,
+                preprocess=args.preprocess,
             )
         else:
             raise ValueError(f"Unknown loop mode type: {args.type}")
