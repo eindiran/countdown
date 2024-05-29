@@ -290,6 +290,9 @@ def show_detected_text(
     """
     Tool for showing detected text via opencv and matplotlib.
     """
+    if display_length == 0:
+        # Don't display if someone specified specifically 0
+        return
     for d in detected:
         top_left = tuple(d[0][0])
         bottom_right = tuple(d[0][2])
