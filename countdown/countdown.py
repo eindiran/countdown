@@ -8,6 +8,7 @@ Countdown anagram and arithmetic puzzle solver.
 
 import argparse
 import itertools
+import os
 import random
 import sys
 import threading
@@ -504,6 +505,11 @@ def main() -> None:
             # args.type == "arithmetic"
             arithmetic_loop_mode(args.loops, args.debug)
     elif vars_args.get("image_path"):
+        # Validate the image file:
+        if not os.path.isfile(args.image_path):
+            print(f"<ERROR> Path to image {args.image_path} does not exist")
+            ocr_subcommand.print_help()
+            sys.exit(1)
         if args.type == "anagram":
             cd_ocr_anagram(
                 args.image_path,
