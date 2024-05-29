@@ -307,7 +307,7 @@ def autoclosing_pyplot_fig(image, duration_s: int = 10) -> None:
 
 
 def show_detected_text(
-    image, detected, color=RED_RGB_TUPLE, thickness: int = 3, display_length: int = 5
+    image, detected, color=RED_RGB_TUPLE, thickness: int = 3, display_length: NullableInt = None
 ) -> None:
     """
     Tool for showing detected text via opencv and matplotlib.
@@ -316,7 +316,11 @@ def show_detected_text(
         top_left = tuple(d[0][0])
         bottom_right = tuple(d[0][2])
         image = cv2.rectangle(image, top_left, bottom_right, color, thickness)  # pylint: disable=no-member
-    autoclosing_pyplot_fig(image, duration_s=display_length)
+    if display_length:
+        autoclosing_pyplot_fig(image, duration_s=display_length)
+    else:
+        plot.imshow(image)
+        plot.show()
 
 
 def preprocess_image(img_path: str, preprocess: bool, greyscale: bool = False):
@@ -344,7 +348,7 @@ def cd_ocr_arithmetic(
     detect_network: str = "craft",
     preprocess: bool = False,
     greyscale: bool = False,
-    display_length: int = 5,
+    display_length: NullableInt = None,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -379,7 +383,7 @@ def cd_ocr_anagram(
     detect_network: str = "craft",
     preprocess: bool = False,
     greyscale: bool = False,
-    display_length: int = 5,
+    display_length: NullableInt = None,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -498,8 +502,7 @@ def main() -> None:
         "-l",
         "--display_length",
         type=int,
-        default=5,
-        help="How long to display the processed image (default: 5s)",
+        help="How long to display the processed image (default: None)",
     )
     args = parser.parse_args()
     vars_args = vars(args)
@@ -519,7 +522,7 @@ def main() -> None:
                 detect_network=args.detect_network,
                 preprocess=args.preprocess,
                 greyscale=args.greyscale,
-                display_length=args.display_length,
+                display_length=vars_args.get("display_length", None),
             )
         elif args.type == "arithmetic":
             cd_ocr_arithmetic(
@@ -529,7 +532,7 @@ def main() -> None:
                 detect_network=args.detect_network,
                 preprocess=args.preprocess,
                 greyscale=args.greyscale,
-                display_length=args.display_length,
+                display_length=vars_args.get("display_length", None),
             )
         else:
             raise ValueError(f"Unknown loop mode type: {args.type}")
