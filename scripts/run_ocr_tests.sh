@@ -52,8 +52,7 @@ while getopts "hrnt:" option; do
             run_arithmetic_tests=false
             ;;
         t)
-            shift 1
-            display_time="${1}"
+            display_time="${OPTARG}"
             ;;
         *)
             printf "Unknown option: %s\n" "${option}"
@@ -61,6 +60,7 @@ while getopts "hrnt:" option; do
             ;;
     esac
 done
+shift $((OPTIND-1))
 
 if [[ "${run_arithmetic_tests}" == true ]]; then
     echo "Running arithmetic OCR tests"

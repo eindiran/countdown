@@ -9,7 +9,7 @@
 #                Countdown from YouTube for use with the OCR toolset.
 #
 #       OPTIONS: ---
-#  REQUIREMENTS: youtube-dl, ffmpeg
+#  REQUIREMENTS: youtube-dl, ffmpeg, rename(1) [perl verison]
 #         NOTES: ---
 #===============================================================================
 
@@ -34,8 +34,7 @@ youtube_url=""
 while getopts "hu:" option; do
     case "${option}" in
         u)
-            shift 1
-            youtube_url="${1}"
+            youtube_url="${OPTARG}"
             ;;
         h)
             usage 0
@@ -45,13 +44,18 @@ while getopts "hu:" option; do
             usage 1
             ;;
     esac
-    shift 1
 done
+shift $((OPTIND-1))
 
 
 if [ -n "${youtube_url}" ]; then
     printf "Using YouTube URL %s\n" "${youtube_url}"
+    youtube-dl -o 'ocr-test/videos/%(title)s.%(ext)s' -f 134 "${youtube_url}" --verbose
+    printf "Renaming downloaded video"
+    rename 's/.*(S[0-9]{2}E[0-9]{2}) - (.*) (.*) (.*).mp4/$1-$2$3$4.mp4/' ocr-test/videos/*.mp4
 else
     echo "No URL specified. Nothing to do."
     usage 0
 fi
+
+echo "Downloading complete!"
