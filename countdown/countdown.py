@@ -13,7 +13,7 @@ import sys
 import threading
 import time
 from pprint import pprint
-from typing import Callable, Union
+from typing import Callable, Optional, Union
 
 import cv2  # type: ignore
 import easyocr  # type: ignore
@@ -83,22 +83,8 @@ def cd_legal_filter(x: str) -> bool:
     return not x[0].isupper() and len(x) < 10
 
 
-def conundrum_filter(x: str) -> bool:
-    """
-    We only want nine letter words that are not capitalized.
-    """
-    return len(x) == 9 and cd_legal_filter(x)
-
-
-def interstitial_filter(x: str) -> bool:
-    """
-    We only want 8 and 9 letter words that are not capitalized.
-    """
-    return len(x) in {8, 9} and cd_legal_filter(x)
-
-
 def nlongest_anagrams(
-    clue: str, word_set: set[str], n_longest: int = 1, lower_bound: int = 2
+    clue: str, word_set: set[str], n_longest: int = 5, lower_bound: int = 2
 ) -> list[AnagramAnswer]:
     """
     Find the longest anagrams matching a clue.
@@ -116,61 +102,45 @@ def nlongest_anagrams(
 def all_matching_conundrums(
     clue: str,
     word_set: set[str],
-    filter_: FilterType,
     len_delta: int = 0,
-    n_longest: int = 1,
+    n_longest: int = 5,
 ) -> list[AnagramAnswer]:
     """
     Return all of the matching anagrams.
 
     Throws AssertionError on clue not matching the filter.
     """
-    assert filter_(clue)
     lower_bound = len(clue) - len_delta
     return nlongest_anagrams(clue, word_set, n_longest, lower_bound)
 
 
-def conundrum(clue: str, num: int = 1) -> None:
+def conundrum(clue: str, num: int = 5, word_set: Optional[set[str]] = None) -> list[AnagramAnswer]:
     """
     Print results for a final conundrum clue.
     """
-    conundrum_word_set = filter_word_list(conundrum_filter)
-    pprint(
-        all_matching_conundrums(
-            clue, conundrum_word_set, conundrum_filter, len_delta=0, n_longest=num
-        )
-    )
+    if not word_set:
+        word_set = filter_word_list(cd_legal_filter)
+    return all_matching_conundrums(clue, word_set, len_delta=0, n_longest=num)
 
 
-def interstitial(clue: str, num: int = 1) -> None:
-    """
-    Print results for an interstitial conundrum clue.
-
-    Use len_delta since they can be 8 or 9 chars long.
-    """
-    interstitial_word_set = filter_word_list(interstitial_filter)
-    pprint(
-        all_matching_conundrums(
-            clue, interstitial_word_set, interstitial_filter, len_delta=1, n_longest=num
-        )
-    )
-
-
-def normal(clue: str, num: int = 5) -> None:
+def normal(clue: str, num: int = 5, word_set: Optional[set[str]] = None) -> list[AnagramAnswer]:
     """
     Print the results of a standard anagram.
     """
-    normal_word_set = filter_word_list(cd_legal_filter)
-    pprint(nlongest_anagrams(clue, normal_word_set, num))
+    if not word_set:
+        word_set = filter_word_list(cd_legal_filter)
+    return nlongest_anagrams(clue, word_set, num)
 
 
-def anagram_loop_mode(loops: int) -> None:
+def anagram_loop_mode(loops: int, debug: bool = False) -> None:
     """
     Launch into looping over runs.
     """
-    normal_word_set = filter_word_list(cd_legal_filter)
-    for _ in range(loops):
-        num_vowels = random.choice([3, 4, 5, 6])
+    word_set = filter_word_list(cd_legal_filter)
+    stats: list[int] = []
+    for l in range(loops):
+        # Legally only up to 5 vowels are allowed:
+        num_vowels = random.choice([3, 4, 5])
         num_consonants = 9 - num_vowels
         letters = []
         letters.extend(
@@ -187,9 +157,14 @@ def anagram_loop_mode(loops: int) -> None:
                 k=num_consonants,
             )
         )
-        print(f"Letters: {' '.join(letters)}")
-        pprint(nlongest_anagrams("".join(letters), normal_word_set, 3))
-        print("")
+        if debug:
+            print(f"Loop: {l}")
+            print(f"Letters: {' '.join(letters)}")
+        res = nlongest_anagrams("".join(letters), word_set, 3)
+        stats.append(int(res[0][1]))
+        if debug:
+            pprint(res)
+            print("")
 
 
 def _add(a: NullableInt, b: NullableInt) -> NullableInt:
@@ -270,11 +245,11 @@ def solve_cd_arithmetic(target: NullableInt, inputs) -> str:
     return ""
 
 
-def arithmetic_loop_mode(loops: int) -> None:
+def arithmetic_loop_mode(loops: int, debug: bool = False) -> None:
     """
     Launch into looping over runs.
     """
-    for _ in range(loops):
+    for l in range(loops):
         target = random.randint(101, 999)
         inputs = [
             random.choice([25, 50, 75, 100]),
@@ -284,10 +259,13 @@ def arithmetic_loop_mode(loops: int) -> None:
             random.randint(1, 10),
             random.randint(1, 10),
         ]
-        print(f"Target: {target}")
-        print(f"Inputs: {inputs}")
+        if debug:
+            print(f"Loop: {l}")
+            print(f"Target: {target}")
+            print(f"Inputs: {inputs}")
         res = solve_cd_arithmetic(target, inputs)
-        print(f"Result: {res if res else 'no solution found'}\n\n")
+        if debug:
+            print(f"Result: {res if res else 'no solution found'}\n\n")
 
 
 def autoclosing_pyplot_fig(image, duration_s: int = 10) -> None:
@@ -433,12 +411,6 @@ def main() -> None:
     anagram_subcommand.add_argument("clue", type=str, help="Input word / clue")
     anagram_controller_group = anagram_subcommand.add_mutually_exclusive_group()
     anagram_controller_group.add_argument(
-        "-i",
-        "--interstitial",
-        action="store_true",
-        help="Toggle on interstitial conundrums",
-    )
-    anagram_controller_group.add_argument(
         "-c",
         "--conundrum",
         action="store_true",
@@ -461,6 +433,12 @@ def main() -> None:
         default="anagram",
         required=False,
         help="Choose which puzzle type to solve",
+    )
+    loop_subcommand.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        help="Print complete debug info for each item in the loop",
     )
     ocr_subcommand = subparsers.add_parser(
         "ocr", help="Command for running OCR on a screenshot of Countdown"
@@ -509,9 +487,9 @@ def main() -> None:
     vars_args = vars(args)
     if vars_args.get("loops"):
         if args.type == "anagram":
-            anagram_loop_mode(args.loops)
+            anagram_loop_mode(args.loops, args.debug)
         elif args.type == "arithmetic":
-            arithmetic_loop_mode(args.loops)
+            arithmetic_loop_mode(args.loops, args.debug)
         else:
             raise ValueError(f"Unknown loop mode type: {args.type}")
     elif vars_args.get("image_path"):
@@ -539,11 +517,9 @@ def main() -> None:
             raise ValueError(f"Unknown loop mode type: {args.type}")
     elif vars_args.get("num"):
         if args.conundrum:
-            conundrum(args.clue.lower(), args.num)
-        elif args.interstitial:
-            interstitial(args.clue.lower(), args.num)
+            pprint(conundrum(args.clue.lower(), args.num))
         else:
-            normal(args.clue.lower(), args.num)
+            pprint(normal(args.clue.lower(), args.num))
     elif vars_args.get("target"):
         print(solve_cd_arithmetic(args.target, args.inputs))
     else:
