@@ -372,7 +372,8 @@ def cd_ocr_arithmetic(
             inputs.extend([int(_) for _ in d[1].replace("/", " ").replace("|", " ").split()])
     print(f"Detected target: {target}")
     print(f"Detected inputs: {inputs}")
-    print(solve_cd_arithmetic(target, inputs))
+    res = solve_cd_arithmetic(target, inputs)
+    print(f"Result: {res if res else 'no solution found'}\n")
 
 
 # pylint: disable=too-many-arguments
