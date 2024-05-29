@@ -10,6 +10,8 @@ import argparse
 import itertools
 import random
 import sys
+import threading
+import time
 from pprint import pprint
 from typing import Callable, Union
 
@@ -288,7 +290,25 @@ def arithmetic_loop_mode(loops: int) -> None:
         print(f"Result: {res if res else 'no solution found'}\n\n")
 
 
-def show_detected_text(image, detected, color=GREEN_RGB_TUPLE, thickness: int = 3) -> None:
+def autoclosing_pyplot_fig(image, duration_s: int = 10) -> None:
+    """
+    Auto-close the mpl.pyplot figure.
+    """
+
+    def _stop():
+        time.sleep(duration_s)
+        plot.close()
+
+    if duration_s:
+        threading.Thread(target=_stop).start()
+    plot.imshow(image)
+    plot.show(block=False)
+    plot.pause(float(duration_s))
+
+
+def show_detected_text(
+    image, detected, color=RED_RGB_TUPLE, thickness: int = 3, display_length: int = 5
+) -> None:
     """
     Tool for showing detected text via opencv and matplotlib.
     """
@@ -296,8 +316,7 @@ def show_detected_text(image, detected, color=GREEN_RGB_TUPLE, thickness: int = 
         top_left = tuple(d[0][0])
         bottom_right = tuple(d[0][2])
         image = cv2.rectangle(image, top_left, bottom_right, color, thickness)  # pylint: disable=no-member
-    plot.imshow(image)
-    plot.show()
+    autoclosing_pyplot_fig(image, duration_s=display_length)
 
 
 def preprocess_image(img_path: str, preprocess: bool, greyscale: bool = False):
@@ -325,6 +344,7 @@ def cd_ocr_arithmetic(
     detect_network: str = "craft",
     preprocess: bool = False,
     greyscale: bool = False,
+    display_length: int = 5,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -337,7 +357,7 @@ def cd_ocr_arithmetic(
     detected = reader.readtext(image, allowlist="0123456789 |/")
     if debug:
         pprint(detected)
-        show_detected_text(image, detected)
+        show_detected_text(image, detected, display_length=display_length)
     target = None
     inputs: list[int] = []
     for d in detected:
@@ -359,6 +379,7 @@ def cd_ocr_anagram(
     detect_network: str = "craft",
     preprocess: bool = False,
     greyscale: bool = False,
+    display_length: int = 5,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -373,7 +394,7 @@ def cd_ocr_anagram(
     )
     if debug:
         pprint(detected)
-        show_detected_text(image, detected)
+        show_detected_text(image, detected, display_length=display_length)
     letters: list[str] = []
     for d in detected:
         letters.append(d[1].lower())
@@ -473,6 +494,13 @@ def main() -> None:
     ocr_subcommand.add_argument(
         "-d", "--debug", action="store_true", help="Show the detected text via matplotlib"
     )
+    ocr_subcommand.add_argument(
+        "-l",
+        "--display_length",
+        type=int,
+        default=5,
+        help="How long to display the processed image (default: 5s)",
+    )
     args = parser.parse_args()
     vars_args = vars(args)
     if vars_args.get("loops"):
@@ -491,6 +519,7 @@ def main() -> None:
                 detect_network=args.detect_network,
                 preprocess=args.preprocess,
                 greyscale=args.greyscale,
+                display_length=args.display_length,
             )
         elif args.type == "arithmetic":
             cd_ocr_arithmetic(
@@ -500,6 +529,7 @@ def main() -> None:
                 detect_network=args.detect_network,
                 preprocess=args.preprocess,
                 greyscale=args.greyscale,
+                display_length=args.display_length,
             )
         else:
             raise ValueError(f"Unknown loop mode type: {args.type}")
