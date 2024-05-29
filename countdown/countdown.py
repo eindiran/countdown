@@ -324,7 +324,7 @@ def cd_ocr_arithmetic(
     debug: bool,
     recog_network: str = "standard",
     detect_network: str = "craft",
-    preprocess: bool = False,
+    preprocess: bool = True,
     greyscale: bool = False,
     display_length: NullableInt = None,
 ) -> None:
@@ -339,7 +339,9 @@ def cd_ocr_arithmetic(
     detected = reader.readtext(image, allowlist="0123456789 |/")
     if debug:
         pprint(detected)
-        show_detected_text(image, detected, display_length=display_length)
+        # Show a red line if we are pre-processing, otherwise use lime green
+        color = RED_RGB_TUPLE if preprocess else GREEN_RGB_TUPLE
+        show_detected_text(image, detected, color=color, display_length=display_length)
     target = None
     inputs: list[int] = []
     for d in detected:
@@ -360,7 +362,7 @@ def cd_ocr_anagram(
     debug: bool,
     recog_network: str = "standard",
     detect_network: str = "craft",
-    preprocess: bool = False,
+    preprocess: bool = True,
     greyscale: bool = False,
     display_length: NullableInt = None,
 ) -> None:
@@ -432,7 +434,7 @@ def main() -> None:
         choices=["anagram", "arithmetic"],
         default="anagram",
         required=False,
-        help="Choose which puzzle type to solve",
+        help="Choose which puzzle type to solve (default: anagram)",
     )
     loop_subcommand.add_argument(
         "-d",
@@ -450,11 +452,12 @@ def main() -> None:
         choices=["anagram", "arithmetic"],
         default="anagram",
         required=False,
-        help="Choose which puzzle type to solve",
+        help="Choose which puzzle type to solve (default: anagram)",
     )
     ocr_subcommand.add_argument(
         "-r",
-        "--recog_network",
+        "--recog-network",
+        dest="recog_network",
         choices=["standard", "english_g2", "latin_g2", "latin_g1"],
         default="standard",
         required=False,
@@ -462,14 +465,19 @@ def main() -> None:
     )
     ocr_subcommand.add_argument(
         "-e",
-        "--detect_network",
+        "--detect-network",
+        dest="detect_network",
         choices=["craft", "dbnet18"],
         default="craft",
         required=False,
         help="Choose the detect network for EasyOCR from the CLI",
     )
     ocr_subcommand.add_argument(
-        "-p", "--preprocess", action="store_true", help="Preprocess the image"
+        "-n",
+        "--no-preprocess",
+        dest="preprocess",
+        action="store_false",
+        help="Don't preprocess the image (default: False)",
     )
     ocr_subcommand.add_argument(
         "-g", "--greyscale", action="store_true", help="Load the image greyscale"
@@ -479,7 +487,8 @@ def main() -> None:
     )
     ocr_subcommand.add_argument(
         "-l",
-        "--display_length",
+        "--display-length",
+        dest="display_length",
         type=int,
         help="How long to display the processed image (default: None)",
     )
@@ -488,10 +497,9 @@ def main() -> None:
     if vars_args.get("loops"):
         if args.type == "anagram":
             anagram_loop_mode(args.loops, args.debug)
-        elif args.type == "arithmetic":
-            arithmetic_loop_mode(args.loops, args.debug)
         else:
-            raise ValueError(f"Unknown loop mode type: {args.type}")
+            # args.type == "arithmetic"
+            arithmetic_loop_mode(args.loops, args.debug)
     elif vars_args.get("image_path"):
         if args.type == "anagram":
             cd_ocr_anagram(
@@ -503,7 +511,8 @@ def main() -> None:
                 greyscale=args.greyscale,
                 display_length=vars_args.get("display_length", None),
             )
-        elif args.type == "arithmetic":
+        else:
+            # args.type == "arithmetic"
             cd_ocr_arithmetic(
                 args.image_path,
                 args.debug,
@@ -513,8 +522,6 @@ def main() -> None:
                 greyscale=args.greyscale,
                 display_length=vars_args.get("display_length", None),
             )
-        else:
-            raise ValueError(f"Unknown loop mode type: {args.type}")
     elif vars_args.get("num"):
         if args.conundrum:
             pprint(conundrum(args.clue.lower(), args.num))
