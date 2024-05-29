@@ -317,6 +317,7 @@ def preprocess_image(img_path: str, preprocess: bool, greyscale: bool = False):
     return image
 
 
+# pylint: disable=too-many-arguments
 def cd_ocr_arithmetic(
     img_path: str,
     debug: bool,
@@ -350,6 +351,7 @@ def cd_ocr_arithmetic(
     print(solve_cd_arithmetic(target, inputs))
 
 
+# pylint: disable=too-many-arguments
 def cd_ocr_anagram(
     img_path: str,
     debug: bool,
@@ -375,12 +377,16 @@ def cd_ocr_anagram(
     letters: list[str] = []
     for d in detected:
         letters.append(d[1].lower())
-    clue = "".join(letters)
-    print(f"Detected clue: {clue}")
+    # Missing characters are most often "i"
+    raw_clue = "".join(letters)
+    print(f"Detected clue: {raw_clue}")
+    clue = raw_clue.ljust(9, "i")
+    if raw_clue != clue:
+        print(f"Using clue (with i-padding): {clue}")
     normal(clue, 5)
 
 
-# pylint: disable=too-many-branches
+# pylint: disable=too-many-branches,too-many-statements
 def main() -> None:
     """
     Main function that adds parsers for CLI control.
