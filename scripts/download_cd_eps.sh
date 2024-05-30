@@ -49,10 +49,12 @@ shift $((OPTIND-1))
 
 
 if [ -n "${youtube_url}" ]; then
+    printf "Continuing in directory: ocr-test/videos/\n"
+    cd ocr-test/videos
     printf "Using YouTube URL %s\n" "${youtube_url}"
-    youtube-dl -o 'ocr-test/videos/%(title)s.%(ext)s' -f 134 "${youtube_url}" --verbose
+    youtube-dl -o '%(title)s.%(ext)s' -f 134 "${youtube_url}" --verbose
     printf "Renaming downloaded video"
-    rename 's/.*(S[0-9]{2}E[0-9]{2}) - (.*) (.*) (.*).mp4/$1-$2$3$4.mp4/' ocr-test/videos/*.mp4
+    rename 's/.*(S[0-9]{2}E[0-9]{2}) - (.*) (.*) (.*).mp4/$1-$2$3$4.mp4/' ./*.mp4
 else
     echo "No URL specified. Nothing to do."
     usage 0

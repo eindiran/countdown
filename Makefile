@@ -1,4 +1,4 @@
-all: venv test-ocr test-loop
+all: venv test-ocr test-loop download
 
 venv: venv/touchfile
 
@@ -13,7 +13,11 @@ test-ocr: venv
 
 .PHONY: test-loop
 test-loop: venv
-	. venv/bin/activate; ./scripts/run_loop_tests.sh
+	. venv/bin/activate; ./scripts/run_loop_tests.sh -l 100
+
+.PHONY: download
+download: venv
+	. venv/bin/activate; ./scripts/download_cd_eps.sh -u test_url
 
 .PHONY: clean
 clean:

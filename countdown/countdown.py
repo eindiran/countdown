@@ -62,6 +62,7 @@ CONSONANT_WEIGHTS = {
 RED_RGB_TUPLE = (255, 0, 0)
 GREEN_RGB_TUPLE = (0, 255, 0)
 BLUE_RGB_TUPLE = (0, 0, 255)
+WHITE_RGB_TUPLE = (255, 255, 255)
 ANAGRAM_ALLOWLIST = string.ascii_uppercase
 ARITHMETIC_ALLOWLIST = string.digits + " |/"
 
@@ -288,7 +289,7 @@ def arithmetic_loop_mode(loops: int, debug: bool = False) -> None:
     print(f"Total solutions not found: {sum(1 for _ in results if not _)}")
 
 
-def autoclosing_pyplot_fig(image, duration_s: int = 10) -> None:
+def autoclosing_pyplot_fig(image, duration_s: int = 10, greyscale: bool = False) -> None:
     """
     Auto-close the mpl.pyplot figure.
     """
@@ -299,13 +300,22 @@ def autoclosing_pyplot_fig(image, duration_s: int = 10) -> None:
 
     if duration_s:
         threading.Thread(target=_stop).start()
-    plot.imshow(image)
+    if greyscale:
+        plot.imshow(image, cmap="gray")
+    else:
+        plot.imshow(image)  # Default color map
     plot.show(block=False)
     plot.pause(float(duration_s))
 
 
+# pylint: disable=too-many-arguments
 def show_detected_text(
-    image, detected, color=RED_RGB_TUPLE, thickness: int = 3, display_length: NullableInt = None
+    image,
+    detected,
+    color=RED_RGB_TUPLE,
+    thickness: int = 3,
+    display_length: NullableInt = None,
+    greyscale: bool = False,
 ) -> None:
     """
     Tool for showing detected text via opencv and matplotlib.
@@ -318,32 +328,47 @@ def show_detected_text(
         bottom_right = tuple(d[0][2])
         image = cv2.rectangle(image, top_left, bottom_right, color, thickness)  # pylint: disable=no-member
     if display_length:
-        autoclosing_pyplot_fig(image, duration_s=display_length)
+        autoclosing_pyplot_fig(image, duration_s=display_length, greyscale=greyscale)
     else:
-        plot.imshow(image)
+        if greyscale:
+            plot.imshow(image, cmap="gray")
+        else:
+            plot.imshow(image)  # Use default colormap
         plot.show()
 
 
+# pylint: disable=no-member
 def preprocess_image(img_path: str, preprocess: bool, greyscale: bool = False):
     """
     Run image pre-processing on the image.
     """
-    if not preprocess:
-        return cv2.imread(img_path)  # pylint: disable=no-member
+    # Load image:
     if greyscale:
-        image = cv2.imread(img_path, 0)  # pylint: disable=no-member
-        image = cv2.equalizeHist(image)  # pylint: disable=no-member
+        # Option 1: Convert the image to greyscale
+        image = cv2.imread(img_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
-        image = cv2.imread(img_path)  # pylint: disable=no-member
-        # Split out blue only:
-        _, _, image = cv2.split(image)  # pylint: disable=no-member
-    image = cv2.GaussianBlur(image, (5, 5), 1)  # pylint: disable=no-member
+        # Option 2: Return the image as-is
+        image = cv2.imread(img_path)
+    # Process image:
+    if not preprocess:
+        return image
+    else:
+        if greyscale:
+            # Option 3: Greyscale + pre-processing
+            image = cv2.equalizeHist(image)
+        else:
+            # Option 4: Blue-only pre-processing
+            image = cv2.imread(img_path)
+            # Split out blue only:
+            _, _, image = cv2.split(image)
+        image = cv2.GaussianBlur(image, (5, 5), 1)
     return image
 
 
 # pylint: disable=too-many-arguments
 def cd_screenshot_ocr_arithmetic(
-    img_path: str,
+    image,
     debug: bool,
     recog_network: str = "standard",
     detect_network: str = "craft",
@@ -358,19 +383,24 @@ def cd_screenshot_ocr_arithmetic(
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
-    image = preprocess_image(img_path, preprocess, greyscale=greyscale)
     detected = reader.readtext(image, allowlist=ARITHMETIC_ALLOWLIST)
+    if not detected:
+        print("Nothing detected, continuing to next frame...")
     if debug:
         pprint(detected)
         # Show a red line if we are pre-processing, otherwise use lime green
         color = RED_RGB_TUPLE if preprocess else GREEN_RGB_TUPLE
-        show_detected_text(image, detected, color=color, display_length=display_length)
+        if greyscale:
+            color = WHITE_RGB_TUPLE
+        show_detected_text(
+            image, detected, color=color, display_length=display_length, greyscale=greyscale
+        )
     target = None
     inputs: list[int] = []
     for d in detected:
         # Target first
         if not target:
-            target = int(d[1])
+            target = int(d[1].replace("/", " ").replace("|", " ").split()[0])
         else:
             inputs.extend([int(_) for _ in d[1].replace("/", " ").replace("|", " ").split()])
     print(f"Detected target: {target}")
@@ -381,7 +411,7 @@ def cd_screenshot_ocr_arithmetic(
 
 # pylint: disable=too-many-arguments, too-many-locals
 def cd_screenshot_ocr_anagram(
-    img_path: str,
+    image,
     debug: bool,
     recog_network: str = "standard",
     detect_network: str = "craft",
@@ -398,7 +428,6 @@ def cd_screenshot_ocr_anagram(
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
-    image = preprocess_image(img_path, preprocess, greyscale=greyscale)
     detected = reader.readtext(
         image,
         allowlist=ANAGRAM_ALLOWLIST,
@@ -407,7 +436,13 @@ def cd_screenshot_ocr_anagram(
     )
     if debug:
         pprint(detected)
-        show_detected_text(image, detected, display_length=display_length)
+        # Show a red line if we are pre-processing, otherwise use lime green
+        color = RED_RGB_TUPLE if preprocess else GREEN_RGB_TUPLE
+        if greyscale:
+            color = WHITE_RGB_TUPLE
+        show_detected_text(
+            image, detected, color=color, display_length=display_length, greyscale=greyscale
+        )
     letters: list[str] = []
     for d in detected:
         letters.append(d[1].lower())
@@ -417,7 +452,38 @@ def cd_screenshot_ocr_anagram(
     clue = raw_clue.ljust(9, "i")
     if raw_clue != clue:
         print(f"Using clue (with i-padding): {clue}")
-    normal(clue, 5)
+    print(f"Solutions: {normal(clue, 5)}")
+
+
+# pylint: disable=no-member
+def cd_video_ocr(
+    video_path: str,
+    debug: bool,
+) -> None:
+    """
+    Handle OCR for video files.
+    """
+    cap = cv2.VideoCapture(video_path)
+    frame_num = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            if debug:
+                print(f"Video from file {video_path} is complete, exiting")
+                return
+        if frame_num < 54000:
+            # Skip over the first 15m
+            frame_num += 1
+            continue
+        if frame_num % 1000 != 0:
+            grey_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # Crop image:
+            image = grey_frame[200:360, 100:600]
+            cd_screenshot_ocr_arithmetic(
+                image, debug, preprocess=False, greyscale=True, display_length=1
+            )
+        frame_num += 1
+    cap.release()
 
 
 # pylint: disable=too-many-branches,too-many-statements
@@ -542,6 +608,7 @@ def main() -> None:
             ocr_subcommand.print_help()
             sys.exit(1)
         print(f"Proceeding with video file: {args.video_path}")
+        cd_video_ocr(args.video_path, args.debug)
     elif vars_args.get("image_path"):
         # Validate the image file:
         if not os.path.isfile(args.image_path):
@@ -549,8 +616,11 @@ def main() -> None:
             ocr_subcommand.print_help()
             sys.exit(1)
         if args.type == "anagram":
+            image = preprocess_image(
+                args.img_path, preprocess=args.preprocess, greyscale=args.greyscale
+            )
             cd_screenshot_ocr_anagram(
-                args.image_path,
+                image,
                 args.debug,
                 recog_network=args.recog_network,
                 detect_network=args.detect_network,
@@ -560,8 +630,11 @@ def main() -> None:
             )
         else:
             # args.type == "arithmetic"
+            image = preprocess_image(
+                args.img_path, preprocess=args.preprocess, greyscale=args.greyscale
+            )
             cd_screenshot_ocr_arithmetic(
-                args.image_path,
+                image,
                 args.debug,
                 recog_network=args.recog_network,
                 detect_network=args.detect_network,
