@@ -338,18 +338,18 @@ def show_detected_text(
 
 
 # pylint: disable=no-member
-def preprocess_image(img_path: str, preprocess: bool, greyscale: bool = False):
+def preprocess_image(image_path: str, preprocess: bool, greyscale: bool = False):
     """
     Run image pre-processing on the image.
     """
     # Load image:
     if greyscale:
         # Option 1: Convert the image to greyscale
-        image = cv2.imread(img_path)
+        image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
         # Option 2: Return the image as-is
-        image = cv2.imread(img_path)
+        image = cv2.imread(image_path)
     # Process image:
     if not preprocess:
         return image
@@ -359,7 +359,7 @@ def preprocess_image(img_path: str, preprocess: bool, greyscale: bool = False):
             image = cv2.equalizeHist(image)
         else:
             # Option 4: Blue-only pre-processing
-            image = cv2.imread(img_path)
+            image = cv2.imread(image_path)
             # Split out blue only:
             _, _, image = cv2.split(image)
         image = cv2.GaussianBlur(image, (5, 5), 1)
@@ -670,7 +670,7 @@ def main() -> None:
             sys.exit(1)
         if args.type == "anagram":
             image = preprocess_image(
-                args.img_path, preprocess=args.preprocess, greyscale=args.greyscale
+                args.image_path, preprocess=args.preprocess, greyscale=args.greyscale
             )
             cd_screenshot_ocr_anagram(
                 image,
@@ -684,7 +684,7 @@ def main() -> None:
         else:
             # args.type == "arithmetic"
             image = preprocess_image(
-                args.img_path, preprocess=args.preprocess, greyscale=args.greyscale
+                args.image_path, preprocess=args.preprocess, greyscale=args.greyscale
             )
             cd_screenshot_ocr_arithmetic(
                 image,
