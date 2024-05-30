@@ -324,8 +324,8 @@ def show_detected_text(
         # Don't display if someone specified specifically 0
         return
     for d in detected:
-        top_left = tuple(d[0][0])
-        bottom_right = tuple(d[0][2])
+        top_left = tuple(int(x) for x in d[0][0])
+        bottom_right = tuple(int(x) for x in d[0][2])
         image = cv2.rectangle(image, top_left, bottom_right, color, thickness)  # pylint: disable=no-member
     if display_length:
         autoclosing_pyplot_fig(image, duration_s=display_length, greyscale=greyscale)
@@ -430,6 +430,7 @@ def cd_screenshot_ocr_anagram(
     display_length: NullableInt = None,
     text_threshold: float = 0.55,
     contrast_threshold: float = 0.25,
+    word_set: Optional[set[str]] = None,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -447,9 +448,14 @@ def cd_screenshot_ocr_anagram(
     if not detected:
         print("Nothing detected, continuing to next segment...")
         raise OCRDetectionError("Empty detected list")
-    if len(detected) < 4:
-        print("Noise detected, continuing to next segment...")
-        raise OCRDetectionError("Truncated detected list")
+    letters: list[str] = []
+    for d in detected:
+        letters.append(d[1].lower())
+    # Missing characters are most often "i"
+    raw_clue = "".join(letters)
+    if len(raw_clue) > 12 or len(raw_clue) < 7:
+        print(f"Noise text ({raw_clue}), continuing...")
+        return
     if debug:
         pprint(detected)
         # Show a red line if we are pre-processing, otherwise use lime green
@@ -459,16 +465,11 @@ def cd_screenshot_ocr_anagram(
         show_detected_text(
             image, detected, color=color, display_length=display_length, greyscale=greyscale
         )
-    letters: list[str] = []
-    for d in detected:
-        letters.append(d[1].lower())
-    # Missing characters are most often "i"
-    raw_clue = "".join(letters)
     print(f"Detected clue: {raw_clue}")
     clue = raw_clue.ljust(9, "i")
     if raw_clue != clue:
         print(f"Using clue (with i-padding): {clue}")
-    print(f"Solutions: {normal(clue, 5)}")
+    print(f"Solutions: {normal(clue, 5, word_set=word_set)}")
 
 
 # pylint: disable=no-member
@@ -484,10 +485,11 @@ def cd_video_ocr(
     cap = cv2.VideoCapture(video_path)
     frame_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(f"Frame count: {frame_length}")
-    start = frame_length // 3  # Skip a third through
+    start = frame_length // 4  # Skip a quarter through
     print(f"Setting frame pointer to: {start}")
     cap.set(cv2.CAP_PROP_POS_FRAMES, start)
     frame_num = start
+    word_set = filter_word_list(cd_legal_filter)
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -498,7 +500,7 @@ def cd_video_ocr(
             if greyscale:
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             # Crop image:
-            image = frame[225:360, 100:600]
+            image = frame[220:360, 0:640]
             ss_ocr_completed = False
             try:
                 cd_screenshot_ocr_arithmetic(
@@ -519,6 +521,7 @@ def cd_video_ocr(
                         preprocess=False,
                         greyscale=greyscale,
                         display_length=display_length,
+                        word_set=word_set,
                     )
                 except (ZeroDivisionError, TypeError, ValueError, IndexError, OCRDetectionError):
                     pass
