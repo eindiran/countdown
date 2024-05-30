@@ -366,6 +366,12 @@ def preprocess_image(img_path: str, preprocess: bool, greyscale: bool = False):
     return image
 
 
+class OCRDetectionError(Exception):
+    """
+    Raise this when OCR fails to detect the required text.
+    """
+
+
 # pylint: disable=too-many-arguments
 def cd_screenshot_ocr_arithmetic(
     image,
@@ -385,7 +391,11 @@ def cd_screenshot_ocr_arithmetic(
     )
     detected = reader.readtext(image, allowlist=ARITHMETIC_ALLOWLIST)
     if not detected:
-        print("Nothing detected, continuing to next frame...")
+        print("Nothing detected, continuing to next segment...")
+        raise OCRDetectionError("Empty detected list")
+    if len(detected) < 4:
+        print("Noise detected, continuing to next segment...")
+        raise OCRDetectionError("Truncated detected list")
     if debug:
         pprint(detected)
         # Show a red line if we are pre-processing, otherwise use lime green
@@ -434,6 +444,12 @@ def cd_screenshot_ocr_anagram(
         text_threshold=text_threshold,
         contrast_ths=contrast_threshold,
     )
+    if not detected:
+        print("Nothing detected, continuing to next segment...")
+        raise OCRDetectionError("Empty detected list")
+    if len(detected) < 4:
+        print("Noise detected, continuing to next segment...")
+        raise OCRDetectionError("Truncated detected list")
     if debug:
         pprint(detected)
         # Show a red line if we are pre-processing, otherwise use lime green
@@ -459,31 +475,56 @@ def cd_screenshot_ocr_anagram(
 def cd_video_ocr(
     video_path: str,
     debug: bool,
+    greyscale: bool = True,
+    display_length: NullableInt = None,
 ) -> None:
     """
     Handle OCR for video files.
     """
     cap = cv2.VideoCapture(video_path)
-    frame_num = 0
+    frame_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f"Frame count: {frame_length}")
+    start = frame_length // 3  # Skip a third through
+    print(f"Setting frame pointer to: {start}")
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start)
+    frame_num = start
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             if debug:
                 print(f"Video from file {video_path} is complete, exiting")
-                return
-        if frame_num < 54000:
-            # Skip over the first 15m
-            frame_num += 1
-            continue
-        if frame_num % 1000 != 0:
-            grey_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            return
+        if frame_num % 750 == 0:
+            if greyscale:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             # Crop image:
-            image = grey_frame[200:360, 100:600]
-            cd_screenshot_ocr_arithmetic(
-                image, debug, preprocess=False, greyscale=True, display_length=1
-            )
+            image = frame[225:360, 100:600]
+            ss_ocr_completed = False
+            try:
+                cd_screenshot_ocr_arithmetic(
+                    image,
+                    debug,
+                    preprocess=False,
+                    greyscale=greyscale,
+                    display_length=display_length,
+                )
+                ss_ocr_completed = True
+            except (ZeroDivisionError, TypeError, ValueError, IndexError, OCRDetectionError):
+                pass
+            if not ss_ocr_completed:
+                try:
+                    cd_screenshot_ocr_anagram(
+                        image,
+                        debug,
+                        preprocess=False,
+                        greyscale=greyscale,
+                        display_length=display_length,
+                    )
+                except (ZeroDivisionError, TypeError, ValueError, IndexError, OCRDetectionError):
+                    pass
         frame_num += 1
     cap.release()
+    print("Video processing complete!")
 
 
 # pylint: disable=too-many-branches,too-many-statements
@@ -542,6 +583,16 @@ def main() -> None:
     video_subcommand.add_argument("video_path", type=str, help="Path to Countdown video")
     video_subcommand.add_argument(
         "-d", "--debug", action="store_true", help="Video OCR debugging info"
+    )
+    video_subcommand.add_argument(
+        "-l",
+        "--display-length",
+        dest="display_length",
+        type=int,
+        help="How long to display the processed frame (default: None)",
+    )
+    video_subcommand.add_argument(
+        "-g", "--greyscale", action="store_true", help="Load the image greyscale"
     )
     ocr_subcommand = subparsers.add_parser(
         "ocr", help="Command for running OCR on a screenshot of Countdown"
@@ -608,7 +659,9 @@ def main() -> None:
             ocr_subcommand.print_help()
             sys.exit(1)
         print(f"Proceeding with video file: {args.video_path}")
-        cd_video_ocr(args.video_path, args.debug)
+        cd_video_ocr(
+            args.video_path, args.debug, display_length=args.display_length, greyscale=args.greyscale
+        )
     elif vars_args.get("image_path"):
         # Validate the image file:
         if not os.path.isfile(args.image_path):
