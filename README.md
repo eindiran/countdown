@@ -143,3 +143,15 @@ make all
 #     Detected inputs: [50, 4, 2, 6, 7, 5]
 #     Result: 50 * 2 * 7 + 6 + 5
 ```
+
+### Video
+
+Note that no video examples are included but there is a script to help download them. You will want to get 360P video, which can be tested with:
+
+```sh
+ffprobe ocr-test/videos/example.mp4 2>&1 | grep "640x360" -c
+```
+
+Requires `ffmpeg` to be installed for the `ffprobe` command.
+
+If you are downloading with `youtube-dl`, use format code `134`.

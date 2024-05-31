@@ -476,7 +476,8 @@ def cd_video_ocr(
     display_length: int | None = None,
 ) -> None:
     """
-    Handle OCR for video files.
+    Handle OCR for video files. Takes 360P video, due to pixel cropping defaults.
+    Use youtube-dl format code 134.
     """
     cap = cv2.VideoCapture(video_path)
     frame_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
