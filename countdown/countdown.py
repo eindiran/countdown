@@ -15,8 +15,8 @@ import string
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pprint import pprint
-from typing import Callable, Optional, Union
 
 import cv2  # type: ignore
 import easyocr  # type: ignore
@@ -24,8 +24,7 @@ import matplotlib.pyplot as plot  # type: ignore
 
 # Types:
 FilterType = Callable[[str], bool]
-AnagramAnswer = list[Union[str, int]]
-NullableInt = Union[int, None]
+AnagramAnswer = list[str | int]
 # Globals:
 WORD_LIST = "/usr/share/dict/words"
 ## SEE HERE: http://thecountdownpage.com/letters.htm
@@ -65,6 +64,14 @@ BLUE_RGB_TUPLE = (0, 0, 255)
 WHITE_RGB_TUPLE = (255, 255, 255)
 ANAGRAM_ALLOWLIST = string.ascii_uppercase
 ARITHMETIC_ALLOWLIST = string.digits + " |/"
+CD_WORD_LEN = 9
+CD_ARITH_LEN = 6
+
+
+class OCRDetectionError(Exception):
+    """
+    Raise this when OCR fails to detect the required text.
+    """
 
 
 def filter_word_list(wfilter: FilterType) -> set[str]:
@@ -73,7 +80,7 @@ def filter_word_list(wfilter: FilterType) -> set[str]:
     from WORD_LIST
     """
     words = set()
-    with open(WORD_LIST, "r", encoding="utf8") as f:
+    with open(WORD_LIST, encoding="utf8") as f:
         for line in f:
             w = line.strip()
             if wfilter(w):
@@ -86,7 +93,7 @@ def cd_legal_filter(x: str) -> bool:
     Filter to get all legal Countdown words (no
     proper nouns).
     """
-    return not x[0].isupper() and len(x) < 10
+    return not x[0].isupper() and len(x) < CD_WORD_LEN + 1
 
 
 def nlongest_anagrams(
@@ -118,7 +125,7 @@ def all_matching_conundrums(
     return nlongest_anagrams(clue, word_set, n_longest, lower_bound)
 
 
-def conundrum(clue: str, num: int = 5, word_set: Optional[set[str]] = None) -> list[AnagramAnswer]:
+def conundrum(clue: str, num: int = 5, word_set: set[str] | None = None) -> list[AnagramAnswer]:
     """
     Print results for a final conundrum clue.
     """
@@ -127,7 +134,7 @@ def conundrum(clue: str, num: int = 5, word_set: Optional[set[str]] = None) -> l
     return all_matching_conundrums(clue, word_set, len_delta=0, n_longest=num)
 
 
-def normal(clue: str, num: int = 5, word_set: Optional[set[str]] = None) -> list[AnagramAnswer]:
+def normal(clue: str, num: int = 5, word_set: set[str] | None = None) -> list[AnagramAnswer]:
     """
     Print the results of a standard anagram.
     """
@@ -182,7 +189,7 @@ def anagram_loop_mode(loops: int, debug: bool = False) -> None:
     print(f"Population variance: {statistics.pvariance(stats)}")
 
 
-def _add(a: NullableInt, b: NullableInt) -> NullableInt:
+def _add(a: int | None, b: int | None) -> int | None:
     """
     Addition fn.
     """
@@ -191,7 +198,7 @@ def _add(a: NullableInt, b: NullableInt) -> NullableInt:
     return a + b
 
 
-def _sub(a: NullableInt, b: NullableInt) -> NullableInt:
+def _sub(a: int | None, b: int | None) -> int | None:
     """
     Subtraction function.
     """
@@ -200,7 +207,7 @@ def _sub(a: NullableInt, b: NullableInt) -> NullableInt:
     return a - b
 
 
-def _mul(a: NullableInt, b: NullableInt) -> NullableInt:
+def _mul(a: int | None, b: int | None) -> int | None:
     """
     Multiplication function.
     """
@@ -209,7 +216,7 @@ def _mul(a: NullableInt, b: NullableInt) -> NullableInt:
     return a * b
 
 
-def _div(a: NullableInt, b: NullableInt) -> NullableInt:
+def _div(a: int | None, b: int | None) -> int | None:
     """
     Division function.
     """
@@ -228,7 +235,7 @@ ARITHMETIC_OPERATIONS = (
 )
 
 
-def solve_single_ordering(target: NullableInt, inputs):
+def solve_single_ordering(target: int | None, inputs):
     """
     Solve a single ordering.
     """
@@ -244,7 +251,7 @@ def solve_single_ordering(target: NullableInt, inputs):
     return []
 
 
-def solve_cd_arithmetic(target: NullableInt, inputs) -> str:
+def solve_cd_arithmetic(target: int | None, inputs) -> str:
     """Solve a Countdown arithmetic problem."""
     if target is None:
         raise ValueError("Can't solve ordering with null target")
@@ -253,9 +260,9 @@ def solve_cd_arithmetic(target: NullableInt, inputs) -> str:
             sol = solve_single_ordering(target, perm)
             if sol:
                 final: list[str] = [str(perm[0])]
-                for i in range(len(perm) - 1):
-                    final.append(sol[i])
-                    final.append(str(perm[i + 1]))
+                for j in range(len(perm) - 1):
+                    final.append(sol[j])
+                    final.append(str(perm[j + 1]))
                 return " ".join(final)
     return ""
 
@@ -308,13 +315,12 @@ def autoclosing_pyplot_fig(image, duration_s: int = 10, greyscale: bool = False)
     plot.pause(float(duration_s))
 
 
-# pylint: disable=too-many-arguments
-def show_detected_text(
+def show_detected_text(  # noqa: PLR0913
     image,
     detected,
     color=RED_RGB_TUPLE,
     thickness: int = 3,
-    display_length: NullableInt = None,
+    display_length: int | None = None,
     greyscale: bool = False,
 ) -> None:
     """
@@ -326,7 +332,7 @@ def show_detected_text(
     for d in detected:
         top_left = tuple(int(x) for x in d[0][0])
         bottom_right = tuple(int(x) for x in d[0][2])
-        image = cv2.rectangle(image, top_left, bottom_right, color, thickness)  # pylint: disable=no-member
+        image = cv2.rectangle(image, top_left, bottom_right, color, thickness)
     if display_length:
         autoclosing_pyplot_fig(image, duration_s=display_length, greyscale=greyscale)
     else:
@@ -337,7 +343,6 @@ def show_detected_text(
         plot.show()
 
 
-# pylint: disable=no-member
 def preprocess_image(image_path: str, preprocess: bool, greyscale: bool = False):
     """
     Run image pre-processing on the image.
@@ -366,21 +371,14 @@ def preprocess_image(image_path: str, preprocess: bool, greyscale: bool = False)
     return image
 
 
-class OCRDetectionError(Exception):
-    """
-    Raise this when OCR fails to detect the required text.
-    """
-
-
-# pylint: disable=too-many-arguments
-def cd_screenshot_ocr_arithmetic(
+def cd_screenshot_ocr_arithmetic(  # noqa: PLR0913
     image,
     debug: bool,
     recog_network: str = "standard",
     detect_network: str = "craft",
     preprocess: bool = True,
     greyscale: bool = False,
-    display_length: NullableInt = None,
+    display_length: int | None = None,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -393,7 +391,7 @@ def cd_screenshot_ocr_arithmetic(
     if not detected:
         print("Nothing detected, continuing to next segment...")
         raise OCRDetectionError("Empty detected list")
-    if len(detected) < 4:
+    if len(detected) < CD_ARITH_LEN - 3:
         print("Noise detected, continuing to next segment...")
         raise OCRDetectionError("Truncated detected list")
     if debug:
@@ -419,18 +417,17 @@ def cd_screenshot_ocr_arithmetic(
     print(f"Result: {res if res else 'no solution found'}\n")
 
 
-# pylint: disable=too-many-arguments, too-many-locals
-def cd_screenshot_ocr_anagram(
+def cd_screenshot_ocr_anagram(  # noqa: PLR0913
     image,
     debug: bool,
     recog_network: str = "standard",
     detect_network: str = "craft",
     preprocess: bool = True,
     greyscale: bool = False,
-    display_length: NullableInt = None,
+    display_length: int | None = None,
     text_threshold: float = 0.55,
     contrast_threshold: float = 0.25,
-    word_set: Optional[set[str]] = None,
+    word_set: set[str] | None = None,
 ) -> None:
     """
     Given a path to an image, perform OCR with easyocr and return
@@ -453,7 +450,7 @@ def cd_screenshot_ocr_anagram(
         letters.append(d[1].lower())
     # Missing characters are most often "i"
     raw_clue = "".join(letters)
-    if len(raw_clue) > 12 or len(raw_clue) < 7:
+    if len(raw_clue) > CD_WORD_LEN + 3 or len(raw_clue) < CD_WORD_LEN - 2:
         print(f"Noise text ({raw_clue}), continuing...")
         return
     if debug:
@@ -472,12 +469,11 @@ def cd_screenshot_ocr_anagram(
     print(f"Solutions: {normal(clue, 5, word_set=word_set)}")
 
 
-# pylint: disable=no-member
 def cd_video_ocr(
     video_path: str,
     debug: bool,
     greyscale: bool = True,
-    display_length: NullableInt = None,
+    display_length: int | None = None,
 ) -> None:
     """
     Handle OCR for video files.
@@ -530,8 +526,7 @@ def cd_video_ocr(
     print("Video processing complete!")
 
 
-# pylint: disable=too-many-branches,too-many-statements
-def main() -> None:
+def main() -> None:  # noqa: PLR0912,PLR0915
     """
     Main function that adds parsers for CLI control.
     """
