@@ -1,6 +1,8 @@
 # countdown
 Messing around with some scripts for automatically solving puzzles from the show [8 Out of 10 Cats Does Countdown](https://en.wikipedia.org/wiki/8_Out_of_10_Cats_Does_Countdown), a comedy panel/game show with anagram and arithmetic puzzles.
 
+The `countdown.py` script uses [EasyOCR](https://github.com/JaidedAI/EasyOCR) and [OpenCV](https://opencv.org/) to handle parsing the puzzles from screenshots or video, as well as presenting a CLI for interacting with solving puzzles as text. The manual is given below.
+
 ### Manual:
 
 ```
