@@ -58,13 +58,24 @@ CONSONANT_WEIGHTS = {
     "y": 1,
     "z": 1,
 }
+# Color RGB tuples for coloring returned OCR
+# images in debug mode:
 RED_RGB_TUPLE = (255, 0, 0)
 GREEN_RGB_TUPLE = (0, 255, 0)
 BLUE_RGB_TUPLE = (0, 0, 255)
 WHITE_RGB_TUPLE = (255, 255, 255)
+# Allowed characters in the anagram OCR; the font used on
+# the show is all upper-case.
 ANAGRAM_ALLOWLIST = string.ascii_uppercase
+# Allow whitespace and slash chars, after some testing this
+# improves the arithmetic OCR accuracy quite a bit since we
+# can split on them, rather than running together adjacent
+# clues.
 ARITHMETIC_ALLOWLIST = string.digits + " |/"
+# Number of letters in the anagram rounds and the number
+# of letters in the conundrum round:
 CD_WORD_LEN = 9
+# Number of distinct clues in the arithmetic rounds:
 CD_ARITH_LEN = 6
 
 
@@ -74,10 +85,17 @@ class OCRDetectionError(Exception):
     """
 
 
-def filter_word_list(wfilter: FilterType) -> set[str]:
+def generate_word_set(wfilter: FilterType) -> set[str]:
     """
     Return a list of words matching a filter,
     from WORD_LIST
+
+    KNOWN LIMITATIONS:
+        1) This does not match the OED word list
+        2) American orthography
+        3) Does not account for special rules, like
+           the rule allowing compounds not listed in
+           the dictionary for 1 syllable words.
     """
     words = set()
     with open(WORD_LIST, encoding="utf8") as f:
@@ -91,7 +109,7 @@ def filter_word_list(wfilter: FilterType) -> set[str]:
 def cd_legal_filter(x: str) -> bool:
     """
     Filter to get all legal Countdown words (no
-    proper nouns).
+    proper nouns, up to 9 letters long).
     """
     return not x[0].isupper() and len(x) < CD_WORD_LEN + 1
 
@@ -100,7 +118,8 @@ def nlongest_anagrams(
     clue: str, word_set: set[str], n_longest: int = 5, lower_bound: int = 2
 ) -> list[AnagramAnswer]:
     """
-    Find the longest anagrams matching a clue.
+    Find the longest anagrams matching a clue; return the n_longest,
+    sorted by length (then lexicographic order within a length).
     """
     matched: set[str] = set()
     for i in range(lower_bound, len(clue) + 1):
@@ -112,62 +131,81 @@ def nlongest_anagrams(
     return sorted([[m, len(m)] for m in longest_matches], key=lambda x: (x[1], x[0]), reverse=True)
 
 
-def all_matching_conundrums(
+def nlongest_conundrums(
     clue: str,
     word_set: set[str],
     len_delta: int = 0,
     n_longest: int = 5,
 ) -> list[AnagramAnswer]:
     """
-    Return all of the matching anagrams.
+    Return the n_longest matching anagrams; used to solve conundrums where
+    we only care about perfect anagrams. This is controlled with the len_delta parameter.
     """
     lower_bound = len(clue) - len_delta
     return nlongest_anagrams(clue, word_set, n_longest, lower_bound)
 
 
-def conundrum(clue: str, num: int = 5, word_set: set[str] | None = None) -> list[AnagramAnswer]:
+def solve_cd_conundrum(
+    clue: str, num: int = 5, word_set: set[str] | None = None
+) -> list[AnagramAnswer]:
     """
-    Print results for a final conundrum clue.
-    """
-    if not word_set:
-        word_set = filter_word_list(cd_legal_filter)
-    return all_matching_conundrums(clue, word_set, len_delta=0, n_longest=num)
-
-
-def normal(clue: str, num: int = 5, word_set: set[str] | None = None) -> list[AnagramAnswer]:
-    """
-    Print the results of a standard anagram.
+    Helper function for calling nlongest_anagrams for a conundrum.
     """
     if not word_set:
-        word_set = filter_word_list(cd_legal_filter)
+        word_set = generate_word_set(cd_legal_filter)
+    return nlongest_conundrums(clue, word_set, len_delta=0, n_longest=num)
+
+
+def solve_cd_anagram(
+    clue: str, num: int = 5, word_set: set[str] | None = None
+) -> list[AnagramAnswer]:
+    """
+    Helper function for calling nlongest_anagrams for a single anagram puzzle.
+    """
+    if not word_set:
+        word_set = generate_word_set(cd_legal_filter)
     return nlongest_anagrams(clue, word_set, num)
+
+
+def generate_random_anagram_clue() -> list[str]:
+    """
+    Generate a random anagram puzzle. Tries to follow the rules of Countdown
+    so the generated puzzle is plausible. Weights come from VOWEL_WEIGHTS
+    and CONSONANT_WEIGHTS above, which are derived from this page:
+        http://thecountdownpage.com/letters.htm
+    """
+    # Legally only up to 5 vowels are allowed:
+    num_vowels = random.choice([3, 4, 5])
+    num_consonants = 9 - num_vowels
+    letters: list[str] = []
+    letters.extend(
+        random.choices(
+            [_ for _ in VOWEL_WEIGHTS],
+            weights=[int(x) for x in VOWEL_WEIGHTS.values()],
+            k=num_vowels,
+        )
+    )
+    letters.extend(
+        random.choices(
+            [_ for _ in CONSONANT_WEIGHTS],
+            weights=[int(x) for x in CONSONANT_WEIGHTS.values()],
+            k=num_consonants,
+        )
+    )
+    # Randomize the list order just to make it look more
+    # presentable.
+    random.shuffle(letters)
+    return letters
 
 
 def anagram_loop_mode(loops: int, debug: bool = False) -> None:
     """
     Launch into looping over runs.
     """
-    word_set = filter_word_list(cd_legal_filter)
+    word_set = generate_word_set(cd_legal_filter)
     stats: list[int] = []
     for l in range(loops):
-        # Legally only up to 5 vowels are allowed:
-        num_vowels = random.choice([3, 4, 5])
-        num_consonants = 9 - num_vowels
-        letters = []
-        letters.extend(
-            random.choices(
-                [str(x) for x in VOWEL_WEIGHTS],
-                weights=[int(x) for x in VOWEL_WEIGHTS.values()],
-                k=num_vowels,
-            )
-        )
-        letters.extend(
-            random.choices(
-                [str(x) for x in CONSONANT_WEIGHTS],
-                weights=[int(x) for x in CONSONANT_WEIGHTS.values()],
-                k=num_consonants,
-            )
-        )
+        letters = generate_random_anagram_clue()
         if debug:
             print(f"Loop: {l}")
             print(f"Letters: {' '.join(letters)}")
@@ -191,7 +229,7 @@ def anagram_loop_mode(loops: int, debug: bool = False) -> None:
 
 def _add(a: int | None, b: int | None) -> int | None:
     """
-    Addition fn.
+    Addition function that supports null.
     """
     if a is None or b is None:
         return None
@@ -200,7 +238,7 @@ def _add(a: int | None, b: int | None) -> int | None:
 
 def _sub(a: int | None, b: int | None) -> int | None:
     """
-    Subtraction function.
+    Subtraction function that supports null.
     """
     if a is None or b is None:
         return None
@@ -209,7 +247,7 @@ def _sub(a: int | None, b: int | None) -> int | None:
 
 def _mul(a: int | None, b: int | None) -> int | None:
     """
-    Multiplication function.
+    Multiplication function that supports null.
     """
     if a is None or b is None:
         return None
@@ -218,7 +256,8 @@ def _mul(a: int | None, b: int | None) -> int | None:
 
 def _div(a: int | None, b: int | None) -> int | None:
     """
-    Division function.
+    Division function that only allows integer division without
+    remainders and supports null.
     """
     if a is None or b is None:
         return None
@@ -235,9 +274,11 @@ ARITHMETIC_OPERATIONS = (
 )
 
 
-def solve_single_ordering(target: int | None, inputs):
+def solve_single_arithmetic_ordering(target: int | None, inputs):
     """
-    Solve a single ordering.
+    Evaluate solutions for a single "ordering" of integer clues in
+    an arithmetic problem. See solve_cd_arithmetic below for a sense of
+    what this is used for.
     """
     if target is None:
         raise ValueError("Can't solve ordering with null target")
@@ -252,12 +293,25 @@ def solve_single_ordering(target: int | None, inputs):
 
 
 def solve_cd_arithmetic(target: int | None, inputs) -> str:
-    """Solve a Countdown arithmetic problem."""
+    """
+    Solve a Countdown arithmetic problem.
+
+    KNOWN LIMITATIONS:
+        1) This method ONLY works for solutions that can be evaluated
+           linearly from left-to-right. Based on some testing, there
+           are relatively few cases where there is no linear solution
+           but there is a solution, and supporting non-linear solutions
+           is order of magnitude slower, so I opted for the faster,
+           dumber algorithm.
+        2) The string formatting at the end takes this fact (1) into
+           account, and doesn't bother adding parens which makes some
+           solutions read incorrectly by PEMDAS.
+    """
     if target is None:
         raise ValueError("Can't solve ordering with null target")
     for i in range(1, len(inputs) + 1):
         for perm in itertools.permutations(inputs, i):
-            sol = solve_single_ordering(target, perm)
+            sol = solve_single_arithmetic_ordering(target, perm)
             if sol:
                 final: list[str] = [str(perm[0])]
                 for j in range(len(perm) - 1):
@@ -267,21 +321,35 @@ def solve_cd_arithmetic(target: int | None, inputs) -> str:
     return ""
 
 
+def generate_random_arithmetic_clue(
+    num_large: int = 2, num_small: int = 4, target_lb: int = 101, target_ub: int = 999
+) -> tuple[int, list[int]]:
+    """
+    Generate a target and input clues for an arithmetic puzzle.
+
+    Target is an integer between 101 and 999 inclusive, however this can be
+    controlled for unusual games with the lower and upper bounds (target_lb
+    and target_ub respectively).
+
+    The number of inputs in a typical arithmetic puzzle is 6:
+    Either 1 large and 5 small or 2 large and 4 small (latter being the default).
+
+    This can be controlled using the num_large and num_small parameters.
+    """
+    target = random.randint(target_lb, target_ub)
+    large_inputs = [random.choice([25, 50, 75, 100]) for _ in range(num_large)]
+    small_inputs = [random.randint(1, 10) for _ in range(num_small)]
+    inputs = large_inputs + small_inputs
+    return (target, inputs)
+
+
 def arithmetic_loop_mode(loops: int, debug: bool = False) -> None:
     """
-    Launch into looping over runs.
+    Launch into looping over arithmetic runs.
     """
     results = []
     for l in range(loops):
-        target = random.randint(101, 999)
-        inputs = [
-            random.choice([25, 50, 75, 100]),
-            random.choice([25, 50, 75, 100]),
-            random.randint(1, 10),
-            random.randint(1, 10),
-            random.randint(1, 10),
-            random.randint(1, 10),
-        ]
+        target, inputs = generate_random_arithmetic_clue()
         if debug:
             print(f"Loop: {l}")
             print(f"Target: {target}")
@@ -298,7 +366,7 @@ def arithmetic_loop_mode(loops: int, debug: bool = False) -> None:
 
 def autoclosing_pyplot_fig(image, duration_s: int = 10, greyscale: bool = False) -> None:
     """
-    Auto-close the mpl.pyplot figure.
+    Auto-closing mpl.pyplot figure.
     """
 
     def _stop():
@@ -345,7 +413,7 @@ def show_detected_text(  # noqa: PLR0913
 
 def preprocess_image(image_path: str, preprocess: bool, greyscale: bool = False):
     """
-    Run image pre-processing on the image.
+    Run image pre-processing on the image prior to OCR.
     """
     # Load image:
     if greyscale:
@@ -430,7 +498,7 @@ def cd_screenshot_ocr_anagram(  # noqa: PLR0913
     word_set: set[str] | None = None,
 ) -> None:
     """
-    Given a path to an image, perform OCR with easyocr and return
+    Given a path to an image, perform OCR with easyocr and print
     the anagram solution.
     """
     reader = easyocr.Reader(
@@ -466,7 +534,7 @@ def cd_screenshot_ocr_anagram(  # noqa: PLR0913
     clue = raw_clue.ljust(9, "i")
     if raw_clue != clue:
         print(f"Using clue (with i-padding): {clue}")
-    print(f"Solutions: {normal(clue, 5, word_set=word_set)}")
+    print(f"Solutions: {solve_cd_anagram(clue, 5, word_set=word_set)}")
 
 
 def cd_video_ocr(
@@ -486,18 +554,22 @@ def cd_video_ocr(
     print(f"Setting frame pointer to: {start}")
     cap.set(cv2.CAP_PROP_POS_FRAMES, start)
     frame_num = start
-    word_set = filter_word_list(cd_legal_filter)
+    word_set = generate_word_set(cd_legal_filter)
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             if debug:
                 print(f"Video from file {video_path} is complete, exiting")
             return
+        # Every 750th frame:
         if frame_num % 750 == 0:
             if greyscale:
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             # Crop image:
             image = frame[220:360, 0:640]
+            # Obviously, the above will not work if the video is an unexpected format
+            # since we are trying to grab the bottom middle of the screen (where clues
+            # are displayed for an extended period during 8OO10CDC).
             ss_ocr_completed = False
             try:
                 cd_screenshot_ocr_arithmetic(
@@ -696,9 +768,9 @@ def main() -> None:  # noqa: PLR0912,PLR0915
             )
     elif vars_args.get("num"):
         if args.conundrum:
-            pprint(conundrum(args.clue.lower(), args.num))
+            pprint(solve_cd_conundrum(args.clue.lower(), args.num))
         else:
-            pprint(normal(args.clue.lower(), args.num))
+            pprint(solve_cd_anagram(args.clue.lower(), args.num))
     elif vars_args.get("target"):
         print(solve_cd_arithmetic(args.target, args.inputs))
     else:
