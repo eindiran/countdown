@@ -35,3 +35,5 @@ test-loop: venv
 .PHONY: clean
 clean:
 	rm -rf .venv
+	rm -rf .ruff_cache
+	rm -rf .mypy_cache
