@@ -34,4 +34,4 @@ test-loop: venv
 # Cleanup the venv
 .PHONY: clean
 clean:
-	rm -rf venv
+	rm -rf .venv

@@ -21,10 +21,13 @@ from pprint import pprint
 import cv2  # type: ignore
 import easyocr  # type: ignore
 import matplotlib.pyplot as plot  # type: ignore
+import numpy  # type: ignore
 
 # Types:
 FilterType = Callable[[str], bool]
 AnagramAnswer = list[str | int]
+ArithmeticSequence = list[int] | tuple[int, ...]
+RGBTuple = tuple[int, int, int]
 # Globals:
 WORD_LIST = "/usr/share/dict/words"
 ## SEE HERE: http://thecountdownpage.com/letters.htm
@@ -60,10 +63,10 @@ CONSONANT_WEIGHTS = {
 }
 # Color RGB tuples for coloring returned OCR
 # images in debug mode:
-RED_RGB_TUPLE = (255, 0, 0)
-GREEN_RGB_TUPLE = (0, 255, 0)
-BLUE_RGB_TUPLE = (0, 0, 255)
-WHITE_RGB_TUPLE = (255, 255, 255)
+RED_RGB_TUPLE: RGBTuple = (255, 0, 0)
+GREEN_RGB_TUPLE: RGBTuple = (0, 255, 0)
+BLUE_RGB_TUPLE: RGBTuple = (0, 0, 255)
+WHITE_RGB_TUPLE: RGBTuple = (255, 255, 255)
 # Allowed characters in the anagram OCR; the font used on
 # the show is all upper-case.
 ANAGRAM_ALLOWLIST = string.ascii_uppercase
@@ -274,7 +277,7 @@ ARITHMETIC_OPERATIONS = (
 )
 
 
-def solve_single_arithmetic_ordering(target: int | None, inputs):
+def solve_single_arithmetic_ordering(target: int | None, inputs: ArithmeticSequence) -> list[str]:
     """
     Evaluate solutions for a single "ordering" of integer clues in
     an arithmetic problem. See solve_cd_arithmetic below for a sense of
@@ -284,7 +287,7 @@ def solve_single_arithmetic_ordering(target: int | None, inputs):
         raise ValueError("Can't solve ordering with null target")
     operator_slots = len(inputs) - 1
     for op_ordering in itertools.product(ARITHMETIC_OPERATIONS, repeat=operator_slots):
-        value = inputs[0]
+        value: int | None = inputs[0]
         for i in range(operator_slots):
             value = op_ordering[i][1](value, inputs[i + 1])
         if value == target:
@@ -292,7 +295,7 @@ def solve_single_arithmetic_ordering(target: int | None, inputs):
     return []
 
 
-def solve_cd_arithmetic(target: int | None, inputs) -> str:
+def solve_cd_arithmetic(target: int | None, inputs: ArithmeticSequence) -> str:
     """
     Solve a Countdown arithmetic problem.
 
@@ -364,12 +367,14 @@ def arithmetic_loop_mode(loops: int, debug: bool = False) -> None:
     print(f"Total solutions not found: {sum(1 for _ in results if not _)}")
 
 
-def autoclosing_pyplot_fig(image, duration_s: int = 10, greyscale: bool = False) -> None:
+def autoclosing_pyplot_fig(
+    image: numpy.ndarray, duration_s: int = 10, greyscale: bool = False
+) -> None:
     """
     Auto-closing mpl.pyplot figure.
     """
 
-    def _stop():
+    def _stop() -> None:
         time.sleep(duration_s)
         plot.close()
 
@@ -384,9 +389,9 @@ def autoclosing_pyplot_fig(image, duration_s: int = 10, greyscale: bool = False)
 
 
 def show_detected_text(  # noqa: PLR0913
-    image,
-    detected,
-    color=RED_RGB_TUPLE,
+    image: numpy.ndarray,
+    detected: list[tuple[list[list[int]], str, numpy.float64]],
+    color: RGBTuple = RED_RGB_TUPLE,
     thickness: int = 3,
     display_length: int | None = None,
     greyscale: bool = False,
@@ -411,7 +416,7 @@ def show_detected_text(  # noqa: PLR0913
         plot.show()
 
 
-def preprocess_image(image_path: str, preprocess: bool, greyscale: bool = False):
+def preprocess_image(image_path: str, preprocess: bool, greyscale: bool = False) -> numpy.ndarray:
     """
     Run image pre-processing on the image prior to OCR.
     """
@@ -440,7 +445,7 @@ def preprocess_image(image_path: str, preprocess: bool, greyscale: bool = False)
 
 
 def cd_screenshot_ocr_arithmetic(  # noqa: PLR0913
-    image,
+    image: numpy.ndarray,
     debug: bool,
     recog_network: str = "standard",
     detect_network: str = "craft",
@@ -469,10 +474,14 @@ def cd_screenshot_ocr_arithmetic(  # noqa: PLR0913
         if greyscale:
             color = WHITE_RGB_TUPLE
         show_detected_text(
-            image, detected, color=color, display_length=display_length, greyscale=greyscale
+            image,
+            detected,
+            color=color,
+            display_length=display_length,
+            greyscale=greyscale,
         )
     target = None
-    inputs: list[int] = []
+    inputs: ArithmeticSequence = []
     for d in detected:
         # Target first
         if not target:
@@ -486,7 +495,7 @@ def cd_screenshot_ocr_arithmetic(  # noqa: PLR0913
 
 
 def cd_screenshot_ocr_anagram(  # noqa: PLR0913
-    image,
+    image: numpy.ndarray,
     debug: bool,
     recog_network: str = "standard",
     detect_network: str = "craft",
@@ -528,7 +537,11 @@ def cd_screenshot_ocr_anagram(  # noqa: PLR0913
         if greyscale:
             color = WHITE_RGB_TUPLE
         show_detected_text(
-            image, detected, color=color, display_length=display_length, greyscale=greyscale
+            image,
+            detected,
+            color=color,
+            display_length=display_length,
+            greyscale=greyscale,
         )
     print(f"Detected clue: {raw_clue}")
     clue = raw_clue.ljust(9, "i")
@@ -580,7 +593,13 @@ def cd_video_ocr(
                     display_length=display_length,
                 )
                 ss_ocr_completed = True
-            except (ZeroDivisionError, TypeError, ValueError, IndexError, OCRDetectionError):
+            except (
+                ZeroDivisionError,
+                TypeError,
+                ValueError,
+                IndexError,
+                OCRDetectionError,
+            ):
                 pass
             if not ss_ocr_completed:
                 try:
@@ -592,7 +611,13 @@ def cd_video_ocr(
                         display_length=display_length,
                         word_set=word_set,
                     )
-                except (ZeroDivisionError, TypeError, ValueError, IndexError, OCRDetectionError):
+                except (
+                    ZeroDivisionError,
+                    TypeError,
+                    ValueError,
+                    IndexError,
+                    OCRDetectionError,
+                ):
                     pass
         frame_num += 1
     cap.release()
@@ -706,7 +731,10 @@ def main() -> None:  # noqa: PLR0912,PLR0915
         "-g", "--greyscale", action="store_true", help="Load the image greyscale"
     )
     ocr_subcommand.add_argument(
-        "-d", "--debug", action="store_true", help="Show the detected text via matplotlib"
+        "-d",
+        "--debug",
+        action="store_true",
+        help="Show the detected text via matplotlib",
     )
     ocr_subcommand.add_argument(
         "-l",
@@ -731,7 +759,10 @@ def main() -> None:  # noqa: PLR0912,PLR0915
             sys.exit(1)
         print(f"Proceeding with video file: {args.video_path}")
         cd_video_ocr(
-            args.video_path, args.debug, display_length=args.display_length, greyscale=args.greyscale
+            args.video_path,
+            args.debug,
+            display_length=args.display_length,
+            greyscale=args.greyscale,
         )
     elif vars_args.get("image_path"):
         # Validate the image file:
