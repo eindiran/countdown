@@ -11,9 +11,13 @@
 
 # all sets up the venv and runs the tests
 .PHONY: all
-all: venv test-ocr test-loop
+all: venv test
 
+.PHONY: venv
 venv: .venv/touchfile
+
+.PHONY: test
+test: test-ocr test-loop
 
 # Build the venv and place a touchfile inside
 .venv/touchfile: requirements.txt
