@@ -22,7 +22,7 @@ from pprint import pprint
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import numpy  # type: ignore
+    import numpy
 
 # Types:
 FilterType = Callable[[str], bool]
@@ -378,7 +378,7 @@ def autoclosing_pyplot_fig(
     """
     Auto-closing mpl.pyplot figure.
     """
-    import matplotlib.pyplot as plot  # type: ignore[import-not-found]  # noqa: PLC0415
+    import matplotlib.pyplot as plot  # noqa: PLC0415
 
     def _stop() -> None:
         time.sleep(duration_s)
@@ -405,8 +405,8 @@ def show_detected_text(  # noqa: PLR0913
     """
     Tool for showing detected text via opencv and matplotlib.
     """
-    import cv2  # type: ignore[import-not-found]  # noqa: PLC0415
-    import matplotlib.pyplot as plot  # type: ignore[import-not-found]  # noqa: PLC0415
+    import cv2  # noqa: PLC0415
+    import matplotlib.pyplot as plot  # noqa: PLC0415
 
     if display_length == 0:
         # Don't display if someone specified specifically 0
@@ -431,16 +431,21 @@ def preprocess_image(
     """
     Run image pre-processing on the image prior to OCR.
     """
-    import cv2  # type: ignore[import-not-found]  # noqa: PLC0415
+    import cv2  # noqa: PLC0415
 
     # Load image:
+    image: numpy.ndarray | None
     if greyscale:
         # Option 1: Convert the image to greyscale
         image = cv2.imread(image_path)
+        if image is None:
+            raise OSError(f"Failed to read image: {image_path}")
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
         # Option 2: Return the image as-is
         image = cv2.imread(image_path)
+        if image is None:
+            raise OSError(f"Failed to read image: {image_path}")
     # Process image:
     if not preprocess:
         return image
@@ -451,6 +456,8 @@ def preprocess_image(
         else:
             # Option 4: Blue-only pre-processing
             image = cv2.imread(image_path)
+            if image is None:
+                raise OSError(f"Failed to read image: {image_path}")
             # Split out blue only:
             _, _, image = cv2.split(image)
         image = cv2.GaussianBlur(image, (5, 5), 1)
@@ -470,7 +477,7 @@ def cd_screenshot_ocr_arithmetic(  # noqa: PLR0913
     Given a path to an image, perform OCR with easyocr and return
     the arithmetic solution.
     """
-    import easyocr  # type: ignore[import-not-found]  # noqa: PLC0415
+    import easyocr  # noqa: PLC0415
 
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
@@ -527,7 +534,7 @@ def cd_screenshot_ocr_anagram(  # noqa: PLR0913
     Given a path to an image, perform OCR with easyocr and print
     the anagram solution.
     """
-    import easyocr  # type: ignore[import-not-found]  # noqa: PLC0415
+    import easyocr  # noqa: PLC0415
 
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
@@ -579,7 +586,7 @@ def cd_video_ocr(
     Handle OCR for video files. Takes 360P video, due to pixel cropping defaults.
     Use youtube-dl format code 134.
     """
-    import cv2  # type: ignore[import-not-found]  # noqa: PLC0415
+    import cv2  # noqa: PLC0415
 
     cap = cv2.VideoCapture(video_path)
     frame_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
