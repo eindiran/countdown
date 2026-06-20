@@ -81,6 +81,8 @@ ARITHMETIC_ALLOWLIST = string.digits + " |/"
 CD_WORD_LEN = 9
 # Number of distinct clues in the arithmetic rounds:
 CD_ARITH_LEN = 6
+# Minimum pool size needed to combine a pair of numbers:
+MIN_PAIR_SIZE = 2
 
 
 class OCRDetectionError(Exception):
@@ -233,100 +235,118 @@ def anagram_loop_mode(loops: int, debug: bool = False) -> None:
     print(f"Population variance: {statistics.pvariance(stats)}")
 
 
-def _add(a: int | None, b: int | None) -> int | None:
+ArithmeticSolution = tuple[int, str]
+
+
+def _solve_cd_arithmetic(  # noqa: PLR0915
+    target: int, inputs: ArithmeticSequence, fast: bool
+) -> list[ArithmeticSolution]:
     """
-    Addition function that supports null.
+    Solve a Countdown arithmetic problem using recursive pair-combination.
+    Returns a list of (num_used, expression) tuples sorted by num_used.
+
+    With fast=True, returns a single-element list on the first solution found.
+    With fast=False, exhaustively collects all distinct solutions.
+
+    Expressions are fully parenthesized and use // for integer division,
+    so they can be pasted directly into a Python REPL to verify correctness.
     """
-    if a is None or b is None:
-        return None
-    return a + b
+    solutions: dict[str, int] = {}
+    num_inputs = len(inputs)
+    found_fast: list[str | None] = [None]
+
+    def recurse(pool: list[int], expressions: list[str]) -> None:  # noqa: PLR0912
+        """
+        Generate expressions recursively from the unexhausted pool of input numbers/generated
+        numbers.
+        """
+        if fast and found_fast[0] is not None:
+            # In fast-solve mode, exit immediately if we already have an answer.
+            return
+
+        for i, val in enumerate(pool):
+            if val == target:
+                # If our pool contains the target value, the last pass generated it
+                if fast:
+                    found_fast[0] = expressions[i]
+                    return
+                used = num_inputs - len(pool) + 1
+                expr = expressions[i]
+                if expr not in solutions or used < solutions[expr]:
+                    solutions[expr] = used
+
+        n = len(pool)
+        if n < MIN_PAIR_SIZE:
+            return
+
+        seen: set[tuple[int, int]] = set()
+        for i in range(n):
+            for j in range(i + 1, n):
+                if fast and found_fast[0] is not None:
+                    return
+                a, b = pool[i], pool[j]
+                pair = (min(a, b), max(a, b))
+                if pair in seen:
+                    continue
+                seen.add(pair)
+
+                ea, eb = expressions[i], expressions[j]
+                rem_p = [pool[k] for k in range(n) if k not in (i, j)]
+                rem_e = [expressions[k] for k in range(n) if k not in (i, j)]
+
+                if a < b:
+                    a, b = b, a
+                    ea, eb = eb, ea
+
+                rem_p.append(a + b)
+                rem_e.append(f"({ea} + {eb})")
+                recurse(rem_p, rem_e)
+                rem_p.pop()
+                rem_e.pop()
+
+                if a > b:
+                    rem_p.append(a - b)
+                    rem_e.append(f"({ea} - {eb})")
+                    recurse(rem_p, rem_e)
+                    rem_p.pop()
+                    rem_e.pop()
+
+                if b > 1:
+                    rem_p.append(a * b)
+                    rem_e.append(f"({ea} * {eb})")
+                    recurse(rem_p, rem_e)
+                    rem_p.pop()
+                    rem_e.pop()
+
+                if b > 1 and a % b == 0:
+                    # no fractions allowed
+                    rem_p.append(a // b)
+                    rem_e.append(f"({ea} // {eb})")
+                    recurse(rem_p, rem_e)
+                    rem_p.pop()
+                    rem_e.pop()
+
+    recurse(list(inputs), [str(n) for n in inputs])
+
+    if fast:
+        if found_fast[0] is not None:
+            return [(num_inputs, found_fast[0])]
+        return []
+    return sorted([(used, expr) for expr, used in solutions.items()])
 
 
-def _sub(a: int | None, b: int | None) -> int | None:
-    """
-    Subtraction function that supports null.
-    """
-    if a is None or b is None:
-        return None
-    return a - b
-
-
-def _mul(a: int | None, b: int | None) -> int | None:
-    """
-    Multiplication function that supports null.
-    """
-    if a is None or b is None:
-        return None
-    return a * b
-
-
-def _div(a: int | None, b: int | None) -> int | None:
-    """
-    Division function that only allows integer division without
-    remainders and supports null.
-    """
-    if a is None or b is None:
-        return None
-    if a % b == 0:
-        return a // b
-    return None
-
-
-ARITHMETIC_OPERATIONS = (
-    ("+", _add),
-    ("-", _sub),
-    ("*", _mul),
-    ("/", _div),
-)
-
-
-def solve_single_arithmetic_ordering(
-    target: int | None, inputs: ArithmeticSequence
-) -> list[str]:
-    """
-    Evaluate solutions for a single "ordering" of integer clues in
-    an arithmetic problem. See solve_cd_arithmetic below for a sense of
-    what this is used for.
-    """
-    if target is None:
-        raise ValueError("Can't solve ordering with null target")
-    operator_slots = len(inputs) - 1
-    for op_ordering in itertools.product(ARITHMETIC_OPERATIONS, repeat=operator_slots):
-        value: int | None = inputs[0]
-        for i in range(operator_slots):
-            value = op_ordering[i][1](value, inputs[i + 1])
-        if value == target:
-            return [o[0] for o in op_ordering]
-    return []
-
-
-def solve_cd_arithmetic(target: int | None, inputs: ArithmeticSequence) -> str:
+def solve_cd_arithmetic(
+    target: int, inputs: ArithmeticSequence, fast: bool = False
+) -> str:
     """
     Solve a Countdown arithmetic problem.
-
-    KNOWN LIMITATIONS:
-        1) This method ONLY works for solutions that can be evaluated
-           linearly from left-to-right. Based on some testing, there
-           are relatively few cases where there is no linear solution
-           but there is a solution, and supporting non-linear solutions
-           is order of magnitude slower, so I opted for the faster,
-           dumber algorithm.
-        2) The string formatting at the end takes this fact (1) into
-           account, and doesn't bother adding parens which makes some
-           solutions read incorrectly by PEMDAS.
+    With fast=False (default), exhaustively searches for the solution using
+    the fewest numbers. With fast=True, returns the first solution found.
     """
-    if target is None:
-        raise ValueError("Can't solve ordering with null target")
-    for i in range(1, len(inputs) + 1):
-        for perm in itertools.permutations(inputs, i):
-            sol = solve_single_arithmetic_ordering(target, perm)
-            if sol:
-                final: list[str] = [str(perm[0])]
-                for j in range(len(perm) - 1):
-                    final.append(sol[j])
-                    final.append(str(perm[j + 1]))
-                return " ".join(final)
-    return ""
+    all_solutions = _solve_cd_arithmetic(target, inputs, fast)
+    if not all_solutions:
+        return ""
+    return all_solutions[0][1]
 
 
 def generate_random_arithmetic_clue(
@@ -362,7 +382,7 @@ def arithmetic_loop_mode(loops: int, debug: bool = False) -> None:
             print(f"Loop: {l}")
             print(f"Target: {target}")
             print(f"Inputs: {inputs}")
-        res = solve_cd_arithmetic(target, inputs)
+        res = solve_cd_arithmetic(target, inputs, fast=True)
         results.append(res)
         if debug:
             print(f"Result: {res if res else 'no solution found'}\n\n")
@@ -512,6 +532,8 @@ def cd_screenshot_ocr_arithmetic(  # noqa: PLR0913
             inputs.extend(
                 [int(_) for _ in d[1].replace("/", " ").replace("|", " ").split()]
             )
+    if target is None:
+        raise OCRDetectionError("Failed to detect target number")
     print(f"Detected target: {target}")
     print(f"Detected inputs: {inputs}")
     res = solve_cd_arithmetic(target, inputs)
@@ -667,6 +689,13 @@ def main() -> None:  # noqa: PLR0912,PLR0915
     arithmetic_subcommand.add_argument("target", type=int, help="Target integer")
     arithmetic_subcommand.add_argument(
         "inputs", type=int, nargs="+", help="Input integers"
+    )
+    arithmetic_subcommand.add_argument(
+        "-f",
+        "--fast-solve",
+        dest="fast_solve",
+        action="store_true",
+        help="Return the first solution found instead of the best",
     )
     anagram_subcommand = subparsers.add_parser(
         "anagram", help="Command to run a single anagram solution"
@@ -841,7 +870,7 @@ def main() -> None:  # noqa: PLR0912,PLR0915
         else:
             pprint(solve_cd_anagram(args.clue.lower(), args.num))
     elif vars_args.get("target"):
-        print(solve_cd_arithmetic(args.target, args.inputs))
+        print(solve_cd_arithmetic(args.target, args.inputs, fast=args.fast_solve))
     else:
         parser.print_help()
         sys.exit(2)
