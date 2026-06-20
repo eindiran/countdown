@@ -6,6 +6,8 @@ countdown.py
 Countdown anagram and arithmetic puzzle solver.
 """
 
+from __future__ import annotations
+
 import argparse
 import itertools
 import os
@@ -17,11 +19,10 @@ import threading
 import time
 from collections.abc import Callable
 from pprint import pprint
+from typing import TYPE_CHECKING
 
-import cv2  # type: ignore
-import easyocr  # type: ignore
-import matplotlib.pyplot as plot  # type: ignore
-import numpy  # type: ignore
+if TYPE_CHECKING:
+    import numpy  # type: ignore
 
 # Types:
 FilterType = Callable[[str], bool]
@@ -131,7 +132,9 @@ def nlongest_anagrams(
             if perm in word_set:
                 matched.add(perm)
     longest_matches = sorted(matched, key=len, reverse=True)[:n_longest]
-    return sorted([[m, len(m)] for m in longest_matches], key=lambda x: (x[1], x[0]), reverse=True)
+    return sorted(
+        [[m, len(m)] for m in longest_matches], key=lambda x: (x[1], x[0]), reverse=True
+    )
 
 
 def nlongest_conundrums(
@@ -277,7 +280,9 @@ ARITHMETIC_OPERATIONS = (
 )
 
 
-def solve_single_arithmetic_ordering(target: int | None, inputs: ArithmeticSequence) -> list[str]:
+def solve_single_arithmetic_ordering(
+    target: int | None, inputs: ArithmeticSequence
+) -> list[str]:
     """
     Evaluate solutions for a single "ordering" of integer clues in
     an arithmetic problem. See solve_cd_arithmetic below for a sense of
@@ -373,6 +378,7 @@ def autoclosing_pyplot_fig(
     """
     Auto-closing mpl.pyplot figure.
     """
+    import matplotlib.pyplot as plot  # type: ignore[import-not-found]  # noqa: PLC0415
 
     def _stop() -> None:
         time.sleep(duration_s)
@@ -399,6 +405,9 @@ def show_detected_text(  # noqa: PLR0913
     """
     Tool for showing detected text via opencv and matplotlib.
     """
+    import cv2  # type: ignore[import-not-found]  # noqa: PLC0415
+    import matplotlib.pyplot as plot  # type: ignore[import-not-found]  # noqa: PLC0415
+
     if display_length == 0:
         # Don't display if someone specified specifically 0
         return
@@ -416,10 +425,14 @@ def show_detected_text(  # noqa: PLR0913
         plot.show()
 
 
-def preprocess_image(image_path: str, preprocess: bool, greyscale: bool = False) -> numpy.ndarray:
+def preprocess_image(
+    image_path: str, preprocess: bool, greyscale: bool = False
+) -> numpy.ndarray:
     """
     Run image pre-processing on the image prior to OCR.
     """
+    import cv2  # type: ignore[import-not-found]  # noqa: PLC0415
+
     # Load image:
     if greyscale:
         # Option 1: Convert the image to greyscale
@@ -457,6 +470,8 @@ def cd_screenshot_ocr_arithmetic(  # noqa: PLR0913
     Given a path to an image, perform OCR with easyocr and return
     the arithmetic solution.
     """
+    import easyocr  # type: ignore[import-not-found]  # noqa: PLC0415
+
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
@@ -487,7 +502,9 @@ def cd_screenshot_ocr_arithmetic(  # noqa: PLR0913
         if not target:
             target = int(d[1].replace("/", " ").replace("|", " ").split()[0])
         else:
-            inputs.extend([int(_) for _ in d[1].replace("/", " ").replace("|", " ").split()])
+            inputs.extend(
+                [int(_) for _ in d[1].replace("/", " ").replace("|", " ").split()]
+            )
     print(f"Detected target: {target}")
     print(f"Detected inputs: {inputs}")
     res = solve_cd_arithmetic(target, inputs)
@@ -510,6 +527,8 @@ def cd_screenshot_ocr_anagram(  # noqa: PLR0913
     Given a path to an image, perform OCR with easyocr and print
     the anagram solution.
     """
+    import easyocr  # type: ignore[import-not-found]  # noqa: PLC0415
+
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
@@ -560,6 +579,8 @@ def cd_video_ocr(
     Handle OCR for video files. Takes 360P video, due to pixel cropping defaults.
     Use youtube-dl format code 134.
     """
+    import cv2  # type: ignore[import-not-found]  # noqa: PLC0415
+
     cap = cv2.VideoCapture(video_path)
     frame_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(f"Frame count: {frame_length}")
@@ -637,7 +658,9 @@ def main() -> None:  # noqa: PLR0912,PLR0915
         "arithmetic", help="Command to run a single solution"
     )
     arithmetic_subcommand.add_argument("target", type=int, help="Target integer")
-    arithmetic_subcommand.add_argument("inputs", type=int, nargs="+", help="Input integers")
+    arithmetic_subcommand.add_argument(
+        "inputs", type=int, nargs="+", help="Input integers"
+    )
     anagram_subcommand = subparsers.add_parser(
         "anagram", help="Command to run a single anagram solution"
     )
@@ -657,8 +680,12 @@ def main() -> None:  # noqa: PLR0912,PLR0915
         required=False,
         help="Return a different number of anagrams (default: 5)",
     )
-    loop_subcommand = subparsers.add_parser("loop", help="Command to loop over random inputs")
-    loop_subcommand.add_argument("loops", type=int, help="Iniate looping n times over random runs")
+    loop_subcommand = subparsers.add_parser(
+        "loop", help="Command to loop over random inputs"
+    )
+    loop_subcommand.add_argument(
+        "loops", type=int, help="Iniate looping n times over random runs"
+    )
     loop_subcommand.add_argument(
         "-t",
         "--type",
@@ -676,7 +703,9 @@ def main() -> None:  # noqa: PLR0912,PLR0915
     video_subcommand = subparsers.add_parser(
         "video", help="Command for running OCR on a video of an episode of Countdown"
     )
-    video_subcommand.add_argument("video_path", type=str, help="Path to Countdown video")
+    video_subcommand.add_argument(
+        "video_path", type=str, help="Path to Countdown video"
+    )
     video_subcommand.add_argument(
         "-d", "--debug", action="store_true", help="Video OCR debugging info"
     )
@@ -693,7 +722,9 @@ def main() -> None:  # noqa: PLR0912,PLR0915
     ocr_subcommand = subparsers.add_parser(
         "ocr", help="Command for running OCR on a screenshot of Countdown"
     )
-    ocr_subcommand.add_argument("image_path", type=str, help="Path to Countdown screenshot")
+    ocr_subcommand.add_argument(
+        "image_path", type=str, help="Path to Countdown screenshot"
+    )
     ocr_subcommand.add_argument(
         "-t",
         "--type",
