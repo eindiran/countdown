@@ -1,20 +1,15 @@
 ---
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
-    rev: 'v0.5.0'
+    rev: "v0.15.18"
     hooks:
       # Formatter
       - id: ruff-format
       # Linter
-      - id: ruff
+      - id: ruff-check
         args: [--fix]
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: 'v1.9.0'
+  - repo: https://github.com/astral-sh/ty-pre-commit
+    rev: "v0.0.51"
     hooks:
-      - id: mypy
-        args: [--strict]
-  - repo: https://github.com/koalaman/shellcheck-precommit
-    rev: 'v0.10.0'
-    hooks:
-      - id: shellcheck
+      - id: ty
+        args: [--python, .venv]

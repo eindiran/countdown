@@ -1,7 +1,9 @@
 # countdown
 Messing around with some scripts for automatically solving puzzles from the show [8 Out of 10 Cats Does Countdown](https://en.wikipedia.org/wiki/8_Out_of_10_Cats_Does_Countdown), a comedy panel/game show with anagram and arithmetic puzzles.
 
-The `countdown.py` script uses [EasyOCR](https://github.com/JaidedAI/EasyOCR) and [OpenCV](https://opencv.org/) to handle parsing the puzzles from screenshots or video, as well as presenting a CLI for interacting with solving puzzles as text. The manual is given below.
+The `countdown.py` script uses [EasyOCR](https://github.com/JaidedAI/EasyOCR) and [OpenCV](https://opencv.org/) to handle parsing the puzzles from screenshots or video, as well as presenting a CLI for interacting with solving puzzles as text. Additionally, the `survey` subcommand can be used for data analysis on which arithmetic puzzles are solveable and how many solutions they have.
+
+The manual for `countdown.py` is given below.
 
 ### Manual:
 
@@ -14,11 +16,12 @@ usage: countdown.py [-h] {arithmetic,anagram,loop,video,ocr} ...
 Solve Countdown anagrams and arithmetic puzzles from the CLI
 
 positional arguments:
-  {arithmetic,anagram,loop,video,ocr}
+  {arithmetic,anagram,loop,survey,video,ocr}
                         sub-command help
     arithmetic          Command to run a single solution
     anagram             Command to run a single anagram solution
     loop                Command to loop over random inputs
+    survey              Generate random arithmetic puzzles and count distinct solutions
     video               Command for running OCR on a video of an episode of Countdown
     ocr                 Command for running OCR on a screenshot of Countdown
 
@@ -63,6 +66,19 @@ options:
   -t {anagram,arithmetic}, --type {anagram,arithmetic}
                         Choose which puzzle type to solve (default: anagram)
   -d, --debug           Print complete debug info for each item in the loop
+
+------------------
+SUBCOMMAND: SURVEY
+------------------
+usage: countdown.py survey [-h] [-n NUM_PUZZLES] [-o OUTPUT] [-w WORKERS]
+
+options:
+  -h, --help            show this help message and exit
+  -n, --num-puzzles NUM_PUZZLES
+                        Number of puzzles to generate (default: 100000)
+  -o, --output OUTPUT   Output CSV file path (default: survey_results.csv)
+  -w, --workers WORKERS
+                        Number of worker processes (default: cpu count)
 
 -----------------
 SUBCOMMAND: VIDEO
@@ -146,6 +162,26 @@ make all
 #     Result: 50 * 2 * 7 + 6 + 5
 ```
 
+### Survey & Analysis
+
+The `survey` subcommand generates random arithmetic puzzles with varied large/small number mixes (0–4 large), exhaustively solves each, and writes the results to a CSV using multiprocessing:
+
+```sh
+./countdown/countdown.py survey -n 100000 -o survey_results.csv
+```
+
+Two analysis scripts in `scripts/` consume the CSV:
+
+```sh
+# Full breakdown by 17 categories (large count, parity, primality, GCD, etc.)
+./scripts/analyze_survey.py survey_results.csv
+
+# Rank all categories by predictive power (success rate spread)
+./scripts/rank_analyses.py survey_results.csv
+```
+
+Both require `pandas` and `sympy`.
+
 ### Video
 
 Note that no video examples are included but there is a script to help download them. You will want to get 360P video, which can be tested with:
@@ -157,3 +193,25 @@ ffprobe ocr-test/videos/example.mp4 2>&1 | grep "640x360" -c
 Requires `ffmpeg` to be installed for the `ffprobe` command.
 
 If you are downloading with `youtube-dl`, use format code `134`.
+
+### Directory layout
+
+```
+countdown/
+├── countdown/
+│   └── countdown.py
+├── scripts/
+│   ├── analyze_survey.py
+│   ├── rank_analyses.py
+│   ├── download_cd_eps.sh
+│   ├── run_loop_tests.sh
+│   └── run_ocr_tests.sh
+├── ocr-test/
+│   ├── anagrams/
+│   ├── arithmetic/
+│   └── videos/
+├── Makefile
+├── pyproject.toml
+├── requirements.txt
+└── README.md
+```

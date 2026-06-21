@@ -6,8 +6,12 @@ countdown.py
 Countdown anagram and arithmetic puzzle solver.
 """
 
+from __future__ import annotations
+
 import argparse
+import csv
 import itertools
+import multiprocessing
 import os
 import random
 import statistics
@@ -17,11 +21,10 @@ import threading
 import time
 from collections.abc import Callable
 from pprint import pprint
+from typing import TYPE_CHECKING
 
-import cv2  # type: ignore
-import easyocr  # type: ignore
-import matplotlib.pyplot as plot  # type: ignore
-import numpy  # type: ignore
+if TYPE_CHECKING:
+    import numpy
 
 # Types:
 FilterType = Callable[[str], bool]
@@ -80,6 +83,8 @@ ARITHMETIC_ALLOWLIST = string.digits + " |/"
 CD_WORD_LEN = 9
 # Number of distinct clues in the arithmetic rounds:
 CD_ARITH_LEN = 6
+# Minimum pool size needed to combine a pair of numbers:
+MIN_PAIR_SIZE = 2
 
 
 class OCRDetectionError(Exception):
@@ -131,7 +136,9 @@ def nlongest_anagrams(
             if perm in word_set:
                 matched.add(perm)
     longest_matches = sorted(matched, key=len, reverse=True)[:n_longest]
-    return sorted([[m, len(m)] for m in longest_matches], key=lambda x: (x[1], x[0]), reverse=True)
+    return sorted(
+        [[m, len(m)] for m in longest_matches], key=lambda x: (x[1], x[0]), reverse=True
+    )
 
 
 def nlongest_conundrums(
@@ -230,98 +237,108 @@ def anagram_loop_mode(loops: int, debug: bool = False) -> None:
     print(f"Population variance: {statistics.pvariance(stats)}")
 
 
-def _add(a: int | None, b: int | None) -> int | None:
+ArithmeticSolution = tuple[int, str]
+
+
+def _solve_cd_arithmetic(  # noqa: PLR0915
+    target: int, inputs: ArithmeticSequence, fast: bool
+) -> list[ArithmeticSolution]:
     """
-    Addition function that supports null.
+    Solve a Countdown arithmetic problem using recursive pair-combination.
+    Returns a list of (num_used, expression) tuples sorted by num_used.
+
+    With fast=True, returns a single-element list on the first solution found.
+    With fast=False, exhaustively collects all distinct solutions.
+
+    Expressions are fully parenthesized and use // for integer division,
+    so they can be pasted directly into a Python REPL to verify correctness.
     """
-    if a is None or b is None:
-        return None
-    return a + b
+    solutions: dict[str, int] = {}
+    num_inputs = len(inputs)
+    found_fast: list[str | None] = [None]
+
+    def recurse(pool: list[int], expressions: list[str]) -> None:  # noqa: PLR0912
+        """
+        Generate expressions recursively from the unexhausted pool of input numbers/generated
+        numbers.
+        """
+        if fast and found_fast[0] is not None:
+            # In fast-solve mode, exit immediately if we already have an answer.
+            return
+        for i, val in enumerate(pool):
+            if val == target:
+                # If our pool contains the target value, the last pass generated it
+                if fast:
+                    found_fast[0] = expressions[i]
+                    return
+                used = num_inputs - len(pool) + 1
+                expr = expressions[i]
+                if expr not in solutions or used < solutions[expr]:
+                    solutions[expr] = used
+        n = len(pool)
+        if n < MIN_PAIR_SIZE:
+            return
+        seen: set[tuple[int, int]] = set()
+        for i in range(n):
+            for j in range(i + 1, n):
+                if fast and found_fast[0] is not None:
+                    return
+                a, b = pool[i], pool[j]
+                pair = (min(a, b), max(a, b))
+                if pair in seen:
+                    continue
+                seen.add(pair)
+                ea, eb = expressions[i], expressions[j]
+                rem_p = [pool[k] for k in range(n) if k not in (i, j)]
+                rem_e = [expressions[k] for k in range(n) if k not in (i, j)]
+                if a < b:
+                    a, b = b, a
+                    ea, eb = eb, ea
+                rem_p.append(a + b)
+                rem_e.append(f"({ea} + {eb})")
+                recurse(rem_p, rem_e)
+                rem_p.pop()
+                rem_e.pop()
+                if a > b:
+                    rem_p.append(a - b)
+                    rem_e.append(f"({ea} - {eb})")
+                    recurse(rem_p, rem_e)
+                    rem_p.pop()
+                    rem_e.pop()
+                if b > 1:
+                    rem_p.append(a * b)
+                    rem_e.append(f"({ea} * {eb})")
+                    recurse(rem_p, rem_e)
+                    rem_p.pop()
+                    rem_e.pop()
+                if b > 1 and a % b == 0:
+                    # no fractions allowed
+                    rem_p.append(a // b)
+                    rem_e.append(f"({ea} // {eb})")
+                    recurse(rem_p, rem_e)
+                    rem_p.pop()
+                    rem_e.pop()
+
+    recurse(list(inputs), [str(n) for n in inputs])
+    if fast:
+        if found_fast[0] is not None:
+            return [(num_inputs, found_fast[0])]
+        return []
+    return sorted([(used, expr) for expr, used in solutions.items()])
 
 
-def _sub(a: int | None, b: int | None) -> int | None:
-    """
-    Subtraction function that supports null.
-    """
-    if a is None or b is None:
-        return None
-    return a - b
-
-
-def _mul(a: int | None, b: int | None) -> int | None:
-    """
-    Multiplication function that supports null.
-    """
-    if a is None or b is None:
-        return None
-    return a * b
-
-
-def _div(a: int | None, b: int | None) -> int | None:
-    """
-    Division function that only allows integer division without
-    remainders and supports null.
-    """
-    if a is None or b is None:
-        return None
-    if a % b == 0:
-        return a // b
-    return None
-
-
-ARITHMETIC_OPERATIONS = (
-    ("+", _add),
-    ("-", _sub),
-    ("*", _mul),
-    ("/", _div),
-)
-
-
-def solve_single_arithmetic_ordering(target: int | None, inputs: ArithmeticSequence) -> list[str]:
-    """
-    Evaluate solutions for a single "ordering" of integer clues in
-    an arithmetic problem. See solve_cd_arithmetic below for a sense of
-    what this is used for.
-    """
-    if target is None:
-        raise ValueError("Can't solve ordering with null target")
-    operator_slots = len(inputs) - 1
-    for op_ordering in itertools.product(ARITHMETIC_OPERATIONS, repeat=operator_slots):
-        value: int | None = inputs[0]
-        for i in range(operator_slots):
-            value = op_ordering[i][1](value, inputs[i + 1])
-        if value == target:
-            return [o[0] for o in op_ordering]
-    return []
-
-
-def solve_cd_arithmetic(target: int | None, inputs: ArithmeticSequence) -> str:
+def solve_cd_arithmetic(
+    target: int, inputs: ArithmeticSequence, fast: bool = False
+) -> str:
     """
     Solve a Countdown arithmetic problem.
-
-    KNOWN LIMITATIONS:
-        1) This method ONLY works for solutions that can be evaluated
-           linearly from left-to-right. Based on some testing, there
-           are relatively few cases where there is no linear solution
-           but there is a solution, and supporting non-linear solutions
-           is order of magnitude slower, so I opted for the faster,
-           dumber algorithm.
-        2) The string formatting at the end takes this fact (1) into
-           account, and doesn't bother adding parens which makes some
-           solutions read incorrectly by PEMDAS.
+    With fast=False (default), exhaustively searches for the solution using
+    the fewest numbers. With fast=True, returns the first solution found.
     """
-    if target is None:
-        raise ValueError("Can't solve ordering with null target")
-    for i in range(1, len(inputs) + 1):
-        for perm in itertools.permutations(inputs, i):
-            sol = solve_single_arithmetic_ordering(target, perm)
-            if sol:
-                final: list[str] = [str(perm[0])]
-                for j in range(len(perm) - 1):
-                    final.append(sol[j])
-                    final.append(str(perm[j + 1]))
-                return " ".join(final)
-    return ""
+    all_solutions = _solve_cd_arithmetic(target, inputs, fast)
+    if not all_solutions:
+        return ""
+    return all_solutions[0][1]
 
 
 def generate_random_arithmetic_clue(
@@ -357,7 +374,7 @@ def arithmetic_loop_mode(loops: int, debug: bool = False) -> None:
             print(f"Loop: {l}")
             print(f"Target: {target}")
             print(f"Inputs: {inputs}")
-        res = solve_cd_arithmetic(target, inputs)
+        res = solve_cd_arithmetic(target, inputs, fast=True)
         results.append(res)
         if debug:
             print(f"Result: {res if res else 'no solution found'}\n\n")
@@ -367,12 +384,52 @@ def arithmetic_loop_mode(loops: int, debug: bool = False) -> None:
     print(f"Total solutions not found: {sum(1 for _ in results if not _)}")
 
 
+def _survey_worker(_: int) -> tuple[int, list[int], int, int]:
+    """
+    Worker for arithmetic_survey_mode. Must be top-level for multiprocessing.
+    """
+    num_large = random.randint(0, 4)
+    num_small = CD_ARITH_LEN - num_large
+    target, inputs = generate_random_arithmetic_clue(num_large, num_small)
+    solutions = _solve_cd_arithmetic(target, inputs, fast=False)
+    return (target, inputs, num_large, len(solutions))
+
+
+def arithmetic_survey_mode(
+    num_puzzles: int, output_path: str, workers: int | None = None
+) -> None:
+    """
+    Generate random arithmetic puzzles, exhaustively solve each, and write
+    the puzzle and solution count to a CSV file.
+    """
+    if workers is None:
+        workers = os.cpu_count() or 1
+    completed = 0
+    with (
+        open(output_path, "w", newline="", encoding="utf8") as f,
+        multiprocessing.Pool(processes=workers) as pool,
+    ):
+        writer = csv.writer(f)
+        writer.writerow(["target", "inputs", "num_large", "num_solutions"])
+        for target, inputs, num_large, num_solutions in pool.imap_unordered(
+            _survey_worker, range(num_puzzles)
+        ):
+            writer.writerow(
+                [target, ";".join(str(x) for x in inputs), num_large, num_solutions]
+            )
+            completed += 1
+            if completed % 10000 == 0:
+                print(f"Progress: {completed}/{num_puzzles}")
+    print(f"Survey complete: {num_puzzles} puzzles written to {output_path}")
+
+
 def autoclosing_pyplot_fig(
     image: numpy.ndarray, duration_s: int = 10, greyscale: bool = False
 ) -> None:
     """
     Auto-closing mpl.pyplot figure.
     """
+    import matplotlib.pyplot as plot  # noqa: PLC0415
 
     def _stop() -> None:
         time.sleep(duration_s)
@@ -399,6 +456,9 @@ def show_detected_text(  # noqa: PLR0913
     """
     Tool for showing detected text via opencv and matplotlib.
     """
+    import cv2  # noqa: PLC0415
+    import matplotlib.pyplot as plot  # noqa: PLC0415
+
     if display_length == 0:
         # Don't display if someone specified specifically 0
         return
@@ -416,18 +476,27 @@ def show_detected_text(  # noqa: PLR0913
         plot.show()
 
 
-def preprocess_image(image_path: str, preprocess: bool, greyscale: bool = False) -> numpy.ndarray:
+def preprocess_image(
+    image_path: str, preprocess: bool, greyscale: bool = False
+) -> numpy.ndarray:
     """
     Run image pre-processing on the image prior to OCR.
     """
+    import cv2  # noqa: PLC0415
+
     # Load image:
+    image: numpy.ndarray | None
     if greyscale:
         # Option 1: Convert the image to greyscale
         image = cv2.imread(image_path)
+        if image is None:
+            raise OSError(f"Failed to read image: {image_path}")
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
         # Option 2: Return the image as-is
         image = cv2.imread(image_path)
+        if image is None:
+            raise OSError(f"Failed to read image: {image_path}")
     # Process image:
     if not preprocess:
         return image
@@ -438,6 +507,8 @@ def preprocess_image(image_path: str, preprocess: bool, greyscale: bool = False)
         else:
             # Option 4: Blue-only pre-processing
             image = cv2.imread(image_path)
+            if image is None:
+                raise OSError(f"Failed to read image: {image_path}")
             # Split out blue only:
             _, _, image = cv2.split(image)
         image = cv2.GaussianBlur(image, (5, 5), 1)
@@ -457,6 +528,8 @@ def cd_screenshot_ocr_arithmetic(  # noqa: PLR0913
     Given a path to an image, perform OCR with easyocr and return
     the arithmetic solution.
     """
+    import easyocr  # noqa: PLC0415
+
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
@@ -487,7 +560,11 @@ def cd_screenshot_ocr_arithmetic(  # noqa: PLR0913
         if not target:
             target = int(d[1].replace("/", " ").replace("|", " ").split()[0])
         else:
-            inputs.extend([int(_) for _ in d[1].replace("/", " ").replace("|", " ").split()])
+            inputs.extend(
+                [int(_) for _ in d[1].replace("/", " ").replace("|", " ").split()]
+            )
+    if target is None:
+        raise OCRDetectionError("Failed to detect target number")
     print(f"Detected target: {target}")
     print(f"Detected inputs: {inputs}")
     res = solve_cd_arithmetic(target, inputs)
@@ -510,6 +587,8 @@ def cd_screenshot_ocr_anagram(  # noqa: PLR0913
     Given a path to an image, perform OCR with easyocr and print
     the anagram solution.
     """
+    import easyocr  # noqa: PLC0415
+
     reader = easyocr.Reader(
         ["en"], gpu=True, recog_network=recog_network, detect_network=detect_network
     )
@@ -560,6 +639,8 @@ def cd_video_ocr(
     Handle OCR for video files. Takes 360P video, due to pixel cropping defaults.
     Use youtube-dl format code 134.
     """
+    import cv2  # noqa: PLC0415
+
     cap = cv2.VideoCapture(video_path)
     frame_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(f"Frame count: {frame_length}")
@@ -637,7 +718,16 @@ def main() -> None:  # noqa: PLR0912,PLR0915
         "arithmetic", help="Command to run a single solution"
     )
     arithmetic_subcommand.add_argument("target", type=int, help="Target integer")
-    arithmetic_subcommand.add_argument("inputs", type=int, nargs="+", help="Input integers")
+    arithmetic_subcommand.add_argument(
+        "inputs", type=int, nargs="+", help="Input integers"
+    )
+    arithmetic_subcommand.add_argument(
+        "-f",
+        "--fast-solve",
+        dest="fast_solve",
+        action="store_true",
+        help="Return the first solution found instead of the best",
+    )
     anagram_subcommand = subparsers.add_parser(
         "anagram", help="Command to run a single anagram solution"
     )
@@ -657,8 +747,12 @@ def main() -> None:  # noqa: PLR0912,PLR0915
         required=False,
         help="Return a different number of anagrams (default: 5)",
     )
-    loop_subcommand = subparsers.add_parser("loop", help="Command to loop over random inputs")
-    loop_subcommand.add_argument("loops", type=int, help="Iniate looping n times over random runs")
+    loop_subcommand = subparsers.add_parser(
+        "loop", help="Command to loop over random inputs"
+    )
+    loop_subcommand.add_argument(
+        "loops", type=int, help="Iniate looping n times over random runs"
+    )
     loop_subcommand.add_argument(
         "-t",
         "--type",
@@ -676,7 +770,9 @@ def main() -> None:  # noqa: PLR0912,PLR0915
     video_subcommand = subparsers.add_parser(
         "video", help="Command for running OCR on a video of an episode of Countdown"
     )
-    video_subcommand.add_argument("video_path", type=str, help="Path to Countdown video")
+    video_subcommand.add_argument(
+        "video_path", type=str, help="Path to Countdown video"
+    )
     video_subcommand.add_argument(
         "-d", "--debug", action="store_true", help="Video OCR debugging info"
     )
@@ -693,7 +789,9 @@ def main() -> None:  # noqa: PLR0912,PLR0915
     ocr_subcommand = subparsers.add_parser(
         "ocr", help="Command for running OCR on a screenshot of Countdown"
     )
-    ocr_subcommand.add_argument("image_path", type=str, help="Path to Countdown screenshot")
+    ocr_subcommand.add_argument(
+        "image_path", type=str, help="Path to Countdown screenshot"
+    )
     ocr_subcommand.add_argument(
         "-t",
         "--type",
@@ -743,9 +841,37 @@ def main() -> None:  # noqa: PLR0912,PLR0915
         type=int,
         help="How long to display the processed image (default: None)",
     )
+    survey_subcommand = subparsers.add_parser(
+        "survey",
+        help="Generate random arithmetic puzzles and count distinct solutions",
+    )
+    survey_subcommand.add_argument(
+        "-n",
+        "--num-puzzles",
+        dest="num_puzzles",
+        type=int,
+        default=100000,
+        help="Number of puzzles to generate (default: 100000)",
+    )
+    survey_subcommand.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default="survey_results.csv",
+        help="Output CSV file path (default: survey_results.csv)",
+    )
+    survey_subcommand.add_argument(
+        "-w",
+        "--workers",
+        type=int,
+        default=None,
+        help="Number of worker processes (default: cpu count)",
+    )
     args = parser.parse_args()
     vars_args = vars(args)
-    if vars_args.get("loops"):
+    if vars_args.get("num_puzzles"):
+        arithmetic_survey_mode(args.num_puzzles, args.output, args.workers)
+    elif vars_args.get("loops"):
         if args.type == "anagram":
             anagram_loop_mode(args.loops, args.debug)
         else:
@@ -803,7 +929,7 @@ def main() -> None:  # noqa: PLR0912,PLR0915
         else:
             pprint(solve_cd_anagram(args.clue.lower(), args.num))
     elif vars_args.get("target"):
-        print(solve_cd_arithmetic(args.target, args.inputs))
+        print(solve_cd_arithmetic(args.target, args.inputs, fast=args.fast_solve))
     else:
         parser.print_help()
         sys.exit(2)
