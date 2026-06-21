@@ -8,10 +8,32 @@ requires-python = ">=3.12"
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "PLC", "PLE", "PLR", "PLW"]
-ignore = ["E501", "E741"]
+select = ["E", "F", "W", "I", "N", "UP", "PLC", "PLE", "PLR", "PLW", "RUF", "B", "D", "UP", "ASYNC",
+"ANN", "PD", "NPY", "PL", "TCH"]
+ignore = [
+    "ANN002", # missing-type-args
+    "ANN003", # missing-type-kwargs
+    "ANN401", # any-type
+    "D200",  # fits-on-one-line
+    "D203",  # one-blank-line-before-class
+    "D204",  # one-blank-line-after-class
+    "D205",  # blank-line-after-summary
+    "D206",  # indent-with-spaces (REDUNDANT)
+    "D212",  # multi-line-summary-first-line
+    "D400",  # ends-in-period
+    "D401",  # non-imperative-mood
+    "D415",  # ends-in-punctuation
+    "D404",  # docstring-starts-with-this
+    "E741",  # ambiguous-variable-name
+    "E501",
+]
+# Don't try to fix flake8-bugbear:
+unfixable = [
+    "B",
+]
 
 [tool.ty.environment]
 python = ".venv"
 
 [tool.ty.rules]
+unresolved-import = "ignore"

@@ -9,7 +9,9 @@ Countdown anagram and arithmetic puzzle solver.
 from __future__ import annotations
 
 import argparse
+import csv
 import itertools
+import multiprocessing
 import os
 import random
 import statistics
@@ -390,6 +392,45 @@ def arithmetic_loop_mode(loops: int, debug: bool = False) -> None:
     print(f"Total runs: {loops}")
     print(f"Total solutions found: {sum(1 for _ in results if _)}")
     print(f"Total solutions not found: {sum(1 for _ in results if not _)}")
+
+
+def _survey_worker(_: int) -> tuple[int, list[int], int, int]:
+    """
+    Worker for arithmetic_survey_mode. Must be top-level for multiprocessing.
+    """
+    num_large = random.randint(0, 4)
+    num_small = CD_ARITH_LEN - num_large
+    target, inputs = generate_random_arithmetic_clue(num_large, num_small)
+    solutions = _solve_cd_arithmetic(target, inputs, fast=False)
+    return (target, inputs, num_large, len(solutions))
+
+
+def arithmetic_survey_mode(
+    num_puzzles: int, output_path: str, workers: int | None = None
+) -> None:
+    """
+    Generate random arithmetic puzzles, exhaustively solve each, and write
+    the puzzle and solution count to a CSV file.
+    """
+    if workers is None:
+        workers = os.cpu_count() or 1
+    completed = 0
+    with (
+        open(output_path, "w", newline="", encoding="utf8") as f,
+        multiprocessing.Pool(processes=workers) as pool,
+    ):
+        writer = csv.writer(f)
+        writer.writerow(["target", "inputs", "num_large", "num_solutions"])
+        for target, inputs, num_large, num_solutions in pool.imap_unordered(
+            _survey_worker, range(num_puzzles)
+        ):
+            writer.writerow(
+                [target, ";".join(str(x) for x in inputs), num_large, num_solutions]
+            )
+            completed += 1
+            if completed % 10000 == 0:
+                print(f"Progress: {completed}/{num_puzzles}")
+    print(f"Survey complete: {num_puzzles} puzzles written to {output_path}")
 
 
 def autoclosing_pyplot_fig(
@@ -810,9 +851,37 @@ def main() -> None:  # noqa: PLR0912,PLR0915
         type=int,
         help="How long to display the processed image (default: None)",
     )
+    survey_subcommand = subparsers.add_parser(
+        "survey",
+        help="Generate random arithmetic puzzles and count distinct solutions",
+    )
+    survey_subcommand.add_argument(
+        "-n",
+        "--num-puzzles",
+        dest="num_puzzles",
+        type=int,
+        default=100000,
+        help="Number of puzzles to generate (default: 100000)",
+    )
+    survey_subcommand.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default="survey_results.csv",
+        help="Output CSV file path (default: survey_results.csv)",
+    )
+    survey_subcommand.add_argument(
+        "-w",
+        "--workers",
+        type=int,
+        default=None,
+        help="Number of worker processes (default: cpu count)",
+    )
     args = parser.parse_args()
     vars_args = vars(args)
-    if vars_args.get("loops"):
+    if vars_args.get("num_puzzles"):
+        arithmetic_survey_mode(args.num_puzzles, args.output, args.workers)
+    elif vars_args.get("loops"):
         if args.type == "anagram":
             anagram_loop_mode(args.loops, args.debug)
         else:
