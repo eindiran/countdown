@@ -265,7 +265,6 @@ def _solve_cd_arithmetic(  # noqa: PLR0915
         if fast and found_fast[0] is not None:
             # In fast-solve mode, exit immediately if we already have an answer.
             return
-
         for i, val in enumerate(pool):
             if val == target:
                 # If our pool contains the target value, the last pass generated it
@@ -276,11 +275,9 @@ def _solve_cd_arithmetic(  # noqa: PLR0915
                 expr = expressions[i]
                 if expr not in solutions or used < solutions[expr]:
                     solutions[expr] = used
-
         n = len(pool)
         if n < MIN_PAIR_SIZE:
             return
-
         seen: set[tuple[int, int]] = set()
         for i in range(n):
             for j in range(i + 1, n):
@@ -291,35 +288,29 @@ def _solve_cd_arithmetic(  # noqa: PLR0915
                 if pair in seen:
                     continue
                 seen.add(pair)
-
                 ea, eb = expressions[i], expressions[j]
                 rem_p = [pool[k] for k in range(n) if k not in (i, j)]
                 rem_e = [expressions[k] for k in range(n) if k not in (i, j)]
-
                 if a < b:
                     a, b = b, a
                     ea, eb = eb, ea
-
                 rem_p.append(a + b)
                 rem_e.append(f"({ea} + {eb})")
                 recurse(rem_p, rem_e)
                 rem_p.pop()
                 rem_e.pop()
-
                 if a > b:
                     rem_p.append(a - b)
                     rem_e.append(f"({ea} - {eb})")
                     recurse(rem_p, rem_e)
                     rem_p.pop()
                     rem_e.pop()
-
                 if b > 1:
                     rem_p.append(a * b)
                     rem_e.append(f"({ea} * {eb})")
                     recurse(rem_p, rem_e)
                     rem_p.pop()
                     rem_e.pop()
-
                 if b > 1 and a % b == 0:
                     # no fractions allowed
                     rem_p.append(a // b)
@@ -329,7 +320,6 @@ def _solve_cd_arithmetic(  # noqa: PLR0915
                     rem_e.pop()
 
     recurse(list(inputs), [str(n) for n in inputs])
-
     if fast:
         if found_fast[0] is not None:
             return [(num_inputs, found_fast[0])]
