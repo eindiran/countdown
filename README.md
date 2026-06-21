@@ -14,11 +14,12 @@ usage: countdown.py [-h] {arithmetic,anagram,loop,video,ocr} ...
 Solve Countdown anagrams and arithmetic puzzles from the CLI
 
 positional arguments:
-  {arithmetic,anagram,loop,video,ocr}
+  {arithmetic,anagram,loop,survey,video,ocr}
                         sub-command help
     arithmetic          Command to run a single solution
     anagram             Command to run a single anagram solution
     loop                Command to loop over random inputs
+    survey              Generate random arithmetic puzzles and count distinct solutions
     video               Command for running OCR on a video of an episode of Countdown
     ocr                 Command for running OCR on a screenshot of Countdown
 
@@ -145,6 +146,26 @@ make all
 #     Detected inputs: [50, 4, 2, 6, 7, 5]
 #     Result: 50 * 2 * 7 + 6 + 5
 ```
+
+### Survey & Analysis
+
+The `survey` subcommand generates random arithmetic puzzles with varied large/small number mixes (0–4 large), exhaustively solves each, and writes the results to a CSV using multiprocessing:
+
+```sh
+./countdown/countdown.py survey -n 100000 -o survey_results.csv
+```
+
+Two analysis scripts in `scripts/` consume the CSV:
+
+```sh
+# Full breakdown by 17 categories (large count, parity, primality, GCD, etc.)
+./scripts/analyze_survey.py survey_results.csv
+
+# Rank all categories by predictive power (success rate spread)
+./scripts/rank_analyses.py survey_results.csv
+```
+
+Both require `pandas` and `sympy`.
 
 ### Video
 
